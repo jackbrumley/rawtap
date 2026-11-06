@@ -180,10 +180,11 @@ fn token_byte(name: &str) -> Option<u8> {
     if up == "DEL" {
         return Some(0x7F);
     }
-    if let Some(h) = up.strip_prefix("0X") {
-        if h.len() == 2 && h.chars().all(|c| c.is_ascii_hexdigit()) {
-            return u8::from_str_radix(h, 16).ok();
-        }
+    if let Some(h) = up.strip_prefix("0X")
+        && h.len() == 2
+        && h.chars().all(|c| c.is_ascii_hexdigit())
+    {
+        return u8::from_str_radix(h, 16).ok();
     }
     None
 }

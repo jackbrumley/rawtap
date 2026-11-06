@@ -377,10 +377,10 @@ impl App {
     fn rescan_ports(&mut self) {
         self.setup.ports = scan_ports();
         self.setup.last_scan = Some(Instant::now());
-        if self.saved.serial_port.trim().is_empty() {
-            if let Some(p) = self.setup.ports.first() {
-                self.saved.serial_port = p.name.clone();
-            }
+        if self.saved.serial_port.trim().is_empty()
+            && let Some(p) = self.setup.ports.first()
+        {
+            self.saved.serial_port = p.name.clone();
         }
     }
 
@@ -436,10 +436,10 @@ impl App {
             }
             Screen::Setup => {
                 let fields = Setup::fields(self.saved.mode, self.setup.options_open);
-                if let Some(f) = fields.get(self.setup.focus).copied() {
-                    if let Some(t) = self.text_mut(f) {
-                        t.push_str(text.lines().next().unwrap_or("").trim());
-                    }
+                if let Some(f) = fields.get(self.setup.focus).copied()
+                    && let Some(t) = self.text_mut(f)
+                {
+                    t.push_str(text.lines().next().unwrap_or("").trim());
                 }
             }
         }
@@ -611,10 +611,10 @@ impl App {
             Event::Key(k) => k,
             Event::Paste(t) => return self.on_paste(t),
             Event::Mouse(me) => {
-                if self.screen == Screen::Monitor {
-                    if let Some(m) = self.monitor.as_mut() {
-                        m.on_mouse(me);
-                    }
+                if self.screen == Screen::Monitor
+                    && let Some(m) = self.monitor.as_mut()
+                {
+                    m.on_mouse(me);
                 }
                 return;
             }

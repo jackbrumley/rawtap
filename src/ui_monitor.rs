@@ -228,7 +228,7 @@ fn thousands(n: u64) -> String {
     let s = n.to_string();
     let mut out = String::new();
     for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i) % 3 == 0 {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(c);
@@ -281,13 +281,13 @@ fn draw_header(f: &mut Frame, m: &Monitor, area: Rect) {
                 .add_modifier(Modifier::BOLD),
         ));
     }
-    if let Some(l) = &m.logger {
-        if let Some(name) = l.path.file_name() {
-            spans.push(Span::styled(
-                format!("  log {}", name.to_string_lossy()),
-                DIM,
-            ));
-        }
+    if let Some(l) = &m.logger
+        && let Some(name) = l.path.file_name()
+    {
+        spans.push(Span::styled(
+            format!("  log {}", name.to_string_lossy()),
+            DIM,
+        ));
     }
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }

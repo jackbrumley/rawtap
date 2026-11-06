@@ -240,12 +240,13 @@ pub(super) fn draw_log(f: &mut Frame, m: &mut Monitor, area: Rect) {
     ids.reverse();
     m.log_row_ids = ids;
     // While dragging (including auto-scroll and the wheel), follow the mouse with the selection.
-    if let (Some(s), Some((x, y))) = (m.selection, m.drag_pos) {
-        if s.dragging && s.pane == Pane::Log {
-            let head = m.pos_at(Pane::Log, x, y);
-            let moved = s.moved || head != s.anchor;
-            m.selection = Some(crate::monitor::Selection { head, moved, ..s });
-        }
+    if let (Some(s), Some((x, y))) = (m.selection, m.drag_pos)
+        && s.dragging
+        && s.pane == Pane::Log
+    {
+        let head = m.pos_at(Pane::Log, x, y);
+        let moved = s.moved || head != s.anchor;
+        m.selection = Some(crate::monitor::Selection { head, moved, ..s });
     }
     f.render_widget(Paragraph::new(rows), inner);
     highlight_log(f, m, inner);
@@ -267,12 +268,13 @@ pub(super) fn draw_term(f: &mut Frame, m: &mut Monitor, area: Rect) {
     m.term_rows = inner.height;
     m.term_inner = inner;
     let abs_top = m.term.abs_top();
-    if let (Some(s), Some((x, y))) = (m.selection, m.drag_pos) {
-        if s.dragging && s.pane == Pane::Terminal {
-            let head = m.pos_at(Pane::Terminal, x, y);
-            let moved = s.moved || head != s.anchor;
-            m.selection = Some(crate::monitor::Selection { head, moved, ..s });
-        }
+    if let (Some(s), Some((x, y))) = (m.selection, m.drag_pos)
+        && s.dragging
+        && s.pane == Pane::Terminal
+    {
+        let head = m.pos_at(Pane::Terminal, x, y);
+        let moved = s.moved || head != s.anchor;
+        m.selection = Some(crate::monitor::Selection { head, moved, ..s });
     }
     let screen = m.term.screen();
     let back = screen.scrollback();

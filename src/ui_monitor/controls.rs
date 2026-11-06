@@ -130,12 +130,14 @@ pub(super) fn draw_input(f: &mut Frame, m: &Monitor, area: Rect) {
         let shown: String = chars.iter().skip(start).take(iw).collect();
         f.render_widget(Paragraph::new(shown).block(block), area);
     }
-    if let Some(c) = cursor {
-        if !m.show_help && m.menu.is_none() && m.paste_confirm.is_none() {
-            let iw = inner.width.max(1) as usize;
-            let start = (c + 1).saturating_sub(iw);
-            f.set_cursor_position((inner.x + (c - start) as u16, inner.y));
-        }
+    if let Some(c) = cursor
+        && !m.show_help
+        && m.menu.is_none()
+        && m.paste_confirm.is_none()
+    {
+        let iw = inner.width.max(1) as usize;
+        let start = (c + 1).saturating_sub(iw);
+        f.set_cursor_position((inner.x + (c - start) as u16, inner.y));
     }
 }
 

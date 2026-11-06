@@ -66,10 +66,11 @@ impl Entry {
 
     /// Number of screen rows this entry takes at a given width (cached).
     pub fn line_count(&mut self, width: u16, fmt: LogFormat) -> usize {
-        if let Some((w, f, n)) = self.cache {
-            if w == width && f == fmt {
-                return n;
-            }
+        if let Some((w, f, n)) = self.cache
+            && w == width
+            && f == fmt
+        {
+            return n;
         }
         let n = crate::ui_monitor::panes::entry_lines(self, width, fmt).len();
         self.cache = Some((width, fmt, n));
