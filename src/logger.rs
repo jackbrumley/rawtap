@@ -26,8 +26,8 @@ impl Logger {
         Ok(Logger { file, path })
     }
 
-    pub fn entry(&mut self, e: &Entry) {
-        let _ = self.file.write_all(format_entry(e).as_bytes());
+    pub fn entry(&mut self, e: &Entry) -> std::io::Result<()> {
+        self.file.write_all(format_entry(e).as_bytes())
     }
 }
 
@@ -57,10 +57,12 @@ pub fn format_entry(e: &Entry) -> String {
 
 impl Drop for Logger {
     fn drop(&mut self) {
-        let _ = writeln!(
+        if let Err(error) = writeln!(
             self.file,
             "\nLog closed: {}",
             chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
-        );
+        ) {
+            log::warn!("Could not close {}: {error}", self.path.display());
+        }
     }
 }

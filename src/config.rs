@@ -1,53 +1,12 @@
-//! Config file (rawtap_config.json), remembered session state (rawtap_state.json), and paths.
+//! `settings.json` (your macros and options, edited by hand) and `state.json`
+//! (what RawTap remembers between runs). Locations come from `paths.rs`;
+//! reading and saving go through `json_store.rs`.
 
 use crate::codec::{InputMode, LineEnding};
+use crate::json_store::{self, Loaded};
+use crate::paths::Paths;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
-
-pub const CONFIG_NAME: &str = "rawtap_config.json";
-pub const STATE_NAME: &str = "rawtap_state.json";
-
-/// Where RawTap keeps its files. `base` is the folder holding the config file (next to the exe
-/// by default), and logs / extracted images / captures / state are written relative to it.
-pub struct Paths {
-    pub base: PathBuf,
-    pub config_file: PathBuf,
-    pub state_file: PathBuf,
-}
-
-impl Paths {
-    pub fn discover() -> Paths {
-        let exe_dir = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(Path::to_path_buf));
-        let cwd = std::env::current_dir().ok();
-        let base = [exe_dir.clone(), cwd]
-            .into_iter()
-            .flatten()
-            .find(|d| d.join(CONFIG_NAME).is_file())
-            .or(exe_dir)
-            .unwrap_or_else(|| PathBuf::from("."));
-        Paths::at(base)
-    }
-
-    pub fn at(base: PathBuf) -> Paths {
-        Paths {
-            config_file: base.join(CONFIG_NAME),
-            state_file: base.join(STATE_NAME),
-            base,
-        }
-    }
-
-    pub fn resolve(&self, p: &str) -> PathBuf {
-        let p = Path::new(p);
-        if p.is_absolute() {
-            p.to_path_buf()
-        } else {
-            self.base.join(p)
-        }
-    }
-}
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
@@ -125,7 +84,7 @@ pub struct Step {
 }
 
 const TEMPLATE: &str = r##"{
-  "_readme": "RawTap config. Edit and restart RawTap. Keys starting with _ are ignored.",
+  "_readme": "RawTap settings. Edit and restart RawTap. Keys starting with _ are ignored.",
   "log_directory": "logs",
   "capture_directory": "captures",
   "macros": [
@@ -155,32 +114,51 @@ const TEMPLATE: &str = r##"{
 }
 "##;
 
-/// Load the config, writing a template if there isn't one. Returns notes to show the user.
-pub fn load(paths: &Paths) -> (Config, Vec<String>) {
+/// Loads `settings.json`, writing the starter template when there isn't one.
+/// Returns notes to show the user. `Err` means the file exists but can't be
+/// read: stop rather than overwrite it.
+pub fn load(paths: &Paths) -> Result<(Config, Vec<String>), String> {
     let mut notes = Vec::new();
-    if !paths.config_file.is_file() {
-        match std::fs::write(&paths.config_file, TEMPLATE) {
-            Ok(()) => notes.push(format!(
-                "Created starter config: {}",
-                paths.config_file.display()
-            )),
-            Err(e) => notes.push(format!("No config file and couldn't create one: {e}")),
+    let config = match json_store::read::<Config>(&paths.settings_file)? {
+        Loaded::Parsed(config) => config,
+        Loaded::Missing => {
+            write_template(paths, &mut notes);
+            template_config()
+        }
+        Loaded::Quarantined { backup, error } => {
+            let note = format!(
+                "settings.json had an error ({error}), so it was renamed {} and RawTap started with the default settings.",
+                backup.display()
+            );
+            log::warn!("{note}");
+            notes.push(note);
+            write_template(paths, &mut notes);
+            template_config()
+        }
+    };
+    Ok((config, notes))
+}
+
+/// The starter settings, so a first run has the example macros whether or
+/// not the template could be written.
+fn template_config() -> Config {
+    serde_json::from_str(TEMPLATE).expect("the starter settings template is valid JSON")
+}
+
+fn write_template(paths: &Paths, notes: &mut Vec<String>) {
+    match json_store::write_atomically(&paths.settings_file, TEMPLATE.as_bytes()) {
+        Ok(()) => {
+            log::info!("Created {}", paths.settings_file.display());
+            notes.push(format!(
+                "Created the starter settings file: {}",
+                paths.settings_file.display()
+            ));
+        }
+        Err(error) => {
+            log::error!("{error}");
+            notes.push(error);
         }
     }
-    let config = match std::fs::read_to_string(&paths.config_file) {
-        Ok(text) => match serde_json::from_str::<Config>(&text) {
-            Ok(c) => c,
-            Err(e) => {
-                notes.push(format!(
-                    "Config error in {} ({e}). Using defaults.",
-                    paths.config_file.display()
-                ));
-                Config::default()
-            }
-        },
-        Err(_) => Config::default(),
-    };
-    (config, notes)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
@@ -195,7 +173,7 @@ pub enum ConnMode {
 impl ConnMode {
     pub fn label(self) -> &'static str {
         match self {
-            ConnMode::Serial => "Serial (COM port)",
+            ConnMode::Serial => "Serial port",
             ConnMode::Tcp => "TCP client (connect out)",
             ConnMode::Listen => "TCP server (listen)",
         }
@@ -307,6 +285,8 @@ pub struct Saved {
     pub listen_bind: String,
     pub listen_port: String,
     pub logging: bool,
+    /// Session log level (F1 → Debug): error, warn, info, debug or trace.
+    pub log_level: String,
     pub history: Vec<HistoryItem>,
     pub profiles: BTreeMap<String, Profile>,
 }
@@ -326,21 +306,41 @@ impl Default for Saved {
             listen_bind: "0.0.0.0".into(),
             listen_port: String::new(),
             logging: true,
+            log_level: crate::session_log::level_name(crate::session_log::DEFAULT_LEVEL).into(),
             history: Vec::new(),
             profiles: BTreeMap::new(),
         }
     }
 }
 
-pub fn load_saved(paths: &Paths) -> Saved {
-    std::fs::read_to_string(&paths.state_file)
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default()
+/// Loads `state.json`. Returns a note when it had to be set aside. `Err`
+/// means the file exists but can't be read: stop rather than overwrite it.
+pub fn load_saved(paths: &Paths) -> Result<(Saved, Option<String>), String> {
+    Ok(match json_store::read::<Saved>(&paths.state_file)? {
+        Loaded::Parsed(saved) => (saved, None),
+        Loaded::Missing => (Saved::default(), None),
+        Loaded::Quarantined { backup, error } => {
+            let note = format!(
+                "state.json had an error ({error}), so it was renamed {} and RawTap started without remembered connections and history.",
+                backup.display()
+            );
+            log::warn!("{note}");
+            (Saved::default(), Some(note))
+        }
+    })
 }
 
-pub fn store_saved(paths: &Paths, saved: &Saved) {
-    if let Ok(text) = serde_json::to_string_pretty(saved) {
-        let _ = std::fs::write(&paths.state_file, text);
+pub fn store_saved(paths: &Paths, saved: &Saved) -> Result<(), String> {
+    json_store::write_json(&paths.state_file, saved)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn starter_template_parses_with_its_macros() {
+        let config = template_config();
+        assert!(config.macros.iter().any(|m| m.key == "Alt+9" && m.capture));
     }
 }

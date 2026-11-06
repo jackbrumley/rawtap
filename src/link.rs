@@ -423,7 +423,7 @@ fn serial_error(port: &str, e: &serialport::Error) -> String {
     let msg = e.to_string();
     let lower = msg.to_lowercase();
     let hint = if lower.contains("access is denied") || lower.contains("permission") {
-        "\nThe port is probably open in another program (PuTTY, another RawTap, a vendor tool)."
+        serial_permission_hint()
     } else if lower.contains("cannot find")
         || lower.contains("not found")
         || matches!(e.kind, serialport::ErrorKind::NoDevice)
@@ -435,15 +435,34 @@ fn serial_error(port: &str, e: &serialport::Error) -> String {
     format!("Failed to open serial port {port}: {msg}{hint}")
 }
 
+#[cfg(windows)]
+fn serial_permission_hint() -> &'static str {
+    "\nThe port is probably open in another program (PuTTY, another RawTap, a vendor tool)."
+}
+
+/// On Linux, serial ports belong to the `dialout` group (`uucp` on Arch).
+#[cfg(not(windows))]
+fn serial_permission_hint() -> &'static str {
+    "\nYour user may not be allowed to use serial ports: add it to the dialout group (uucp on Arch), e.g. `sudo usermod -aG dialout $USER`, then log out and back in. Or the port is open in another program."
+}
+
+#[cfg(windows)]
+fn listen_permission_hint() -> &'static str {
+    "\nWindows refused the port (reserved range or policy). Try another port."
+}
+
+#[cfg(not(windows))]
+fn listen_permission_hint() -> &'static str {
+    "\nPorts below 1024 need root on Linux. Try a port above 1024."
+}
+
 fn listen_error(bind: &str, port: u16, e: &std::io::Error) -> String {
     let hint = match e.kind() {
         ErrorKind::AddrInUse => "\nSomething else is already listening on that port.",
         ErrorKind::AddrNotAvailable => {
-            "\nThat bind address isn't on this PC. Use 0.0.0.0 for all interfaces."
+            "\nThat bind address isn't on this computer. Use 0.0.0.0 for all interfaces."
         }
-        ErrorKind::PermissionDenied => {
-            "\nWindows refused the port (reserved range or policy). Try another port."
-        }
+        ErrorKind::PermissionDenied => listen_permission_hint(),
         _ => "",
     };
     format!("Failed to listen on {bind}:{port}: {e}{hint}")

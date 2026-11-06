@@ -3,13 +3,18 @@ mod clip;
 mod codec;
 mod config;
 mod extract;
+mod json_store;
 mod link;
 mod logger;
 mod macros;
 mod menu;
 mod monitor;
+mod opener;
+mod paths;
+mod session_log;
 #[cfg(test)]
 mod switch_sim;
+mod system_info;
 mod term;
 mod ui;
 mod ui_monitor;
@@ -30,13 +35,16 @@ struct Cli {
     /// Don't write a log file for this session
     #[arg(long, global = true)]
     no_log: bool,
+    /// Print the details a bug report needs (version, OS, terminal) and exit
+    #[arg(long)]
+    system_info: bool,
 }
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Open a serial (COM) port
+    /// Open a serial port
     Serial {
-        /// COM port, e.g. COM3
+        /// Serial port, e.g. COM3 (Windows) or /dev/ttyUSB0 (Linux)
         #[arg(short, long)]
         port: Option<String>,
         /// Baud rate (default: last used, else 9600)
@@ -119,7 +127,13 @@ fn apply_cli(cmd: &Option<Cmd>, s: &mut config::Saved) -> bool {
                 s.flow = capitalise(v);
             }
             if let Some(p) = port {
-                s.serial_port = p.to_uppercase();
+                // Windows port names are case-insensitive and shown as COM3;
+                // Linux device paths are case-sensitive.
+                s.serial_port = if cfg!(windows) {
+                    p.to_uppercase()
+                } else {
+                    p.clone()
+                };
                 true
             } else {
                 false
@@ -163,8 +177,85 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> std::io::Resul
     Ok(())
 }
 
+/// Puts the terminal back to normal: mouse capture off, raw mode and the
+/// alternate screen left. Safe to call when the TUI never started.
+pub fn restore_terminal() {
+    // Best effort on the way out; there's nowhere left to report a failure.
+    let _ = ratatui::crossterm::execute!(
+        std::io::stdout(),
+        ratatui::crossterm::event::DisableMouseCapture
+    );
+    ratatui::restore();
+}
+
+/// Before the TUI starts: print why RawTap can't run and wait, so a console
+/// opened by double-clicking doesn't vanish before it can be read.
+fn fail_before_tui(message: &str) -> ! {
+    log::error!("{message}");
+    eprintln!("RawTap could not start: {message}");
+    wait_for_enter();
+    std::process::exit(1);
+}
+
+fn wait_for_enter() {
+    eprintln!("Press Enter to close.");
+    // Only a pause before exiting; a closed stdin just ends it sooner.
+    let _ = std::io::stdin().read_line(&mut String::new());
+}
+
+/// Everything before the TUI: the one-time move from 0.6.0's locations, the
+/// session log, then state and settings. `Err` stops RawTap without touching
+/// a file it couldn't read.
+fn start(cli: &Cli) -> Result<(App, bool), String> {
+    let paths = paths::Paths::discover()?;
+    let migrations = paths::migrate_legacy_files(&paths);
+    session_log::init(&paths.debug_dir(), session_log::DEFAULT_LEVEL)?;
+    log::info!("Config folder: {}", paths.base.display());
+
+    let mut notes = Vec::new();
+    for migration in &migrations {
+        match migration {
+            paths::Migration::Moved { .. } => {
+                log::info!("{}", migration.describe());
+                notes.push(migration.describe());
+            }
+            // Only logged: it would repeat on every start.
+            paths::Migration::KeptNew { .. } => log::warn!("{}", migration.describe()),
+            paths::Migration::Failed { .. } => {
+                log::error!("{}", migration.describe());
+                notes.push(migration.describe());
+            }
+        }
+    }
+
+    let (mut saved, state_note) = config::load_saved(&paths)?;
+    notes.extend(state_note);
+    match session_log::parse_level(&saved.log_level) {
+        Some(level) => session_log::set_level(level),
+        None => {
+            let note = format!(
+                "Unknown log level '{}' in state.json; using {}.",
+                saved.log_level,
+                session_log::level_name(session_log::DEFAULT_LEVEL)
+            );
+            log::warn!("{note}");
+            notes.push(note);
+        }
+    }
+    let (cfg, config_notes) = config::load(&paths)?;
+    notes.extend(config_notes);
+    let direct = apply_cli(&cli.cmd, &mut saved);
+    Ok((App::new(cfg, paths, saved, notes, cli.no_log), direct))
+}
+
 fn main() {
+    session_log::install_panic_hook();
     let cli = Cli::parse();
+
+    if cli.system_info {
+        println!("{}", system_info::SystemInfo::collect().summary());
+        return;
+    }
 
     if let Some(Cmd::Ports) = cli.cmd {
         let ports = app::scan_ports();
@@ -177,12 +268,7 @@ fn main() {
         return;
     }
 
-    let paths = config::Paths::discover();
-    let (cfg, notes) = config::load(&paths);
-    let mut saved = config::load_saved(&paths);
-    let direct = apply_cli(&cli.cmd, &mut saved);
-
-    let mut app = App::new(cfg, paths, saved, notes, cli.no_log);
+    let (mut app, direct) = start(&cli).unwrap_or_else(|error| fail_before_tui(&error));
     if direct {
         app.request_connect();
     }
@@ -190,32 +276,31 @@ fn main() {
     let mut terminal = ratatui::init();
     // RawTap handles the mouse itself (wheel scrolling, selection) so the console doesn't turn
     // the wheel into arrow keys for the device. Shift+drag still uses the console's selection.
-    let _ = ratatui::crossterm::execute!(
+    if let Err(error) = ratatui::crossterm::execute!(
         std::io::stdout(),
         ratatui::crossterm::event::EnableMouseCapture
-    );
-    let prev_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
-        let _ = ratatui::crossterm::execute!(
-            std::io::stdout(),
-            ratatui::crossterm::event::DisableMouseCapture
-        );
-        prev_hook(info);
-    }));
+    ) {
+        log::warn!("Mouse capture unavailable: {error}");
+    }
     set_title("RawTap");
     let result = run(&mut terminal, &mut app);
-    app.shutdown();
-    let _ = ratatui::crossterm::execute!(
-        std::io::stdout(),
-        ratatui::crossterm::event::DisableMouseCapture
-    );
-    ratatui::restore();
+    let saved = app.shutdown();
+    restore_terminal();
     set_title("");
 
-    if let Err(e) = result {
-        eprintln!("RawTap error: {e}");
-        eprintln!("Press Enter to close.");
-        let _ = std::io::stdin().read_line(&mut String::new());
+    let mut failed = false;
+    if let Err(error) = saved {
+        eprintln!("RawTap could not save its state: {error}");
+        failed = true;
+    }
+    if let Err(error) = result {
+        log::error!("RawTap error: {error}");
+        eprintln!("RawTap error: {error}");
+        failed = true;
+    }
+    log::info!("SESSION END");
+    if failed {
+        wait_for_enter();
     }
 }
 
@@ -264,12 +349,8 @@ mod screen_tests {
 
         let dir = std::env::temp_dir().join(format!("rawtap_ui_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let paths = config::Paths {
-            base: dir.clone(),
-            config_file: dir.join(config::CONFIG_NAME),
-            state_file: dir.join(config::STATE_NAME),
-        };
-        let (cfg, notes) = config::load(&paths);
+        let paths = paths::Paths::at(dir.clone());
+        let (cfg, notes) = config::load(&paths).unwrap();
         let saved = config::Saved::default();
         let mut app = App::new(cfg, paths, saved, notes, false);
         let mut t = Terminal::new(TestBackend::new(100, 30)).unwrap();
@@ -305,7 +386,7 @@ mod screen_tests {
         key(&mut app, KeyCode::F(1));
         t.draw(|f| ui::draw(f, &mut app)).unwrap();
         dump(&t, "help");
-        app.shutdown();
+        app.shutdown().unwrap();
         let logs = std::fs::read_dir(dir.join("logs"))
             .unwrap()
             .next()
@@ -315,7 +396,7 @@ mod screen_tests {
         println!("===== log file\n{}", std::fs::read_to_string(logs).unwrap());
         println!(
             "===== state\n{}",
-            std::fs::read_to_string(dir.join(config::STATE_NAME)).unwrap()
+            std::fs::read_to_string(dir.join(paths::STATE_FILE)).unwrap()
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

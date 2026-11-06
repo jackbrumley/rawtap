@@ -285,9 +285,16 @@ impl Monitor {
     pub fn attach(&mut self, link: Link, logger: Option<Logger>, note: Option<String>) {
         link.set_pacing(self.profile.char_delay_ms);
         self.link = Some(link);
+        let mut transcript_note = None;
         self.transcript = logger
             .as_ref()
-            .and_then(|l| Transcript::create(&l.path).ok());
+            .and_then(|l| match Transcript::create(&l.path) {
+                Ok(t) => Some(t),
+                Err(error) => {
+                    transcript_note = Some(format!("Could not create the transcript: {error}"));
+                    None
+                }
+            });
         self.logger = logger;
         self.connected = true;
         self.peer = None;
@@ -309,7 +316,8 @@ impl Monitor {
             let p = t.path.display().to_string();
             self.push(EntryKind::Info(format!("Plain-text transcript: {p}")));
         }
-        if let Some(n) = note {
+        for n in note.into_iter().chain(transcript_note) {
+            log::error!("{n}");
             self.push(EntryKind::Error(n));
         }
     }
@@ -331,14 +339,38 @@ impl Monitor {
         let mut e = Entry::new(kind);
         self.next_id += 1;
         e.id = self.next_id;
-        if let Some(l) = self.logger.as_mut() {
-            l.entry(&e);
-        }
+        let failure = self.write_log(&e);
         self.push_entry(&mut e);
         self.entries.push_back(e);
         while self.entries.len() > MAX_ENTRIES {
             self.entries.pop_front();
         }
+        if let Some(error) = failure {
+            self.report_error(error);
+        }
+    }
+
+    /// Writes an entry to the traffic log. On failure (disk full, drive gone)
+    /// logging stops and the reason is returned, so it's reported once
+    /// instead of failing on every entry.
+    fn write_log(&mut self, e: &Entry) -> Option<String> {
+        let logger = self.logger.as_mut()?;
+        let error = logger.entry(e).err()?;
+        let message = format!(
+            "Logging stopped: could not write {}: {error}",
+            logger.path.display()
+        );
+        self.logger = None;
+        self.transcript = None;
+        Some(message)
+    }
+
+    /// Shows an error in the raw log and on the status line, and writes it to
+    /// the session log.
+    pub fn report_error(&mut self, message: String) {
+        log::error!("{message}");
+        self.set_status(message.clone(), true);
+        self.push(EntryKind::Error(message));
     }
 
     fn push_entry(&mut self, e: &mut Entry) {
@@ -396,13 +428,14 @@ impl Monitor {
             kind,
             cache: None,
         };
-        if let Some(l) = self.logger.as_mut() {
-            l.entry(&e);
-        }
+        let failure = self.write_log(&e);
         self.push_entry(&mut e);
         self.entries.push_back(e);
         while self.entries.len() > MAX_ENTRIES {
             self.entries.pop_front();
+        }
+        if let Some(error) = failure {
+            self.report_error(error);
         }
     }
 
@@ -517,8 +550,15 @@ impl Monitor {
                     }
                     self.plain_text.drain(..cut);
                 }
-                if let Some(t) = self.transcript.as_mut() {
-                    t.feed(&d);
+                if let Some(t) = self.transcript.as_mut()
+                    && let Err(error) = t.feed(&d)
+                {
+                    let message = format!(
+                        "Transcript stopped: could not write {}: {error}",
+                        t.path.display()
+                    );
+                    self.transcript = None;
+                    self.report_error(message);
                 }
                 if let Some(r) = self.run.as_mut() {
                     r.on_rx(&d);

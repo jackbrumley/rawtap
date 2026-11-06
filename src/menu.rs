@@ -20,6 +20,9 @@ pub enum Cmd {
     Paste,
     CopyAll,
     OpenTranscript,
+    CopySessionLog,
+    OpenLogFolder,
+    CopySystemInfo,
     Reconnect,
     NewConnection,
     Quit,
@@ -36,6 +39,7 @@ pub enum Setting {
     LiveKeys,
     ScrollPane,
     LogFollow,
+    LogLevel,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -183,9 +187,9 @@ pub fn items(m: &Monitor) -> Vec<Item> {
     ));
     v.push(cmd(
         "COPY & PASTE",
-        "Open transcript in Notepad",
+        "Open transcript",
         "",
-        "Opens this session's plain-text transcript (everything the device printed, cleaned up) in Notepad.".into(),
+        "Opens this session's plain-text transcript (everything the device printed, cleaned up) in your text editor: Notepad on Windows, the desktop's default app on Linux.".into(),
         Cmd::OpenTranscript,
     ));
 
@@ -301,6 +305,37 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         "Closes RawTap. Settings and history are saved. Ctrl+Shift+Q also quits from live keys."
             .into(),
         Cmd::Quit,
+    ));
+
+    // Debug (App Standard section 4): what a bug report needs.
+    v.push(cmd(
+        "DEBUG",
+        "Copy log",
+        "",
+        "Copies RawTap's own session log (not the device traffic) to the clipboard, for a bug report.".into(),
+        Cmd::CopySessionLog,
+    ));
+    v.push(cmd(
+        "DEBUG",
+        "Open log folder",
+        "",
+        "Opens the folder with RawTap's session log, the previous session's log and the update log.".into(),
+        Cmd::OpenLogFolder,
+    ));
+    v.push(cmd(
+        "DEBUG",
+        "Copy system info",
+        "",
+        "Copies RawTap's version, the OS, the desktop and the terminal to the clipboard. Bug reports ask for this and the log.".into(),
+        Cmd::CopySystemInfo,
+    ));
+    v.push(setting(
+        "DEBUG",
+        "Log level",
+        crate::session_log::level_name(log::max_level()).into(),
+        "",
+        "How much RawTap writes to its session log. Info is enough for most bug reports; debug and trace add detail.",
+        Setting::LogLevel,
     ));
     v
 }

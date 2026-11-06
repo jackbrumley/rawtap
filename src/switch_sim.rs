@@ -201,8 +201,8 @@ fn drive_a_switch() {
     let dir = std::env::temp_dir().join(format!("rawtap_sw_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let paths = config::Paths::at(dir.clone());
-    let (cfg, notes) = config::load(&paths);
+    let paths = crate::paths::Paths::at(dir.clone());
+    let (cfg, notes) = config::load(&paths).unwrap();
     let saved = config::Saved {
         mode: ConnMode::Tcp,
         tcp_host: "127.0.0.1".into(),
@@ -682,7 +682,7 @@ fn drive_a_switch() {
     );
     assert!(app.quit, "Ctrl+Shift+Q didn't quit from live keys");
 
-    app.shutdown();
+    app.shutdown().unwrap();
     let logs = dir.join("logs");
     let mut files: Vec<_> = std::fs::read_dir(&logs)
         .unwrap()
@@ -722,7 +722,7 @@ fn drive_a_switch() {
     for l in cl.iter().rev().take(3).rev() {
         println!("{l}");
     }
-    let state = std::fs::read_to_string(dir.join(config::STATE_NAME)).unwrap();
+    let state = std::fs::read_to_string(dir.join(crate::paths::STATE_FILE)).unwrap();
 
     assert!(
         !all_text.contains("secret"),

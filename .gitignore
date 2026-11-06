@@ -36,7 +36,3 @@ reference-systems/
 
 # Coverage
 coverage/
-
-# RawTap output when run from the repository (before the ~/.config/rawtap move)
-captures/
-rawtap_state.json

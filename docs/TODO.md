@@ -5,33 +5,8 @@ the Release and Update Standard (see `AGENTS.md`).
 
 ## Now
 
-- **App basics (App Standard §3–5):**
-  - `src/paths.rs` owns every location: `~/.config/rawtap` on every platform
-    (Windows: `%USERPROFILE%\.config\rawtap`), honouring `XDG_CONFIG_HOME` on
-    Linux. Config becomes `settings.json`, state `state.json`; traffic logs
-    and captures go under it. Remove the next-to-the-exe lookup in
-    `config.rs` and the repo's `rawtap_config.json` sample (keep the
-    starter template in code).
-  - Session log `debug/session.log` (previous run kept as
-    `last-session.log`), standard header, `[<RFC 3339>] LEVEL: message`
-    lines, log level in settings.
-  - Panic hook: restore the terminal, then log the panic.
-  - Atomic writes for settings and state; an unparseable file is renamed
-    `.invalid-<timestamp>` and the user is told once. Today
-    `config.rs` saves state with `let _ = std::fs::write(...)`.
-  - F1 → Debug: Copy log, Open log folder, System info, log level; and
-    `rawtap --system-info`.
-- **Native Linux:**
-  - "Open transcript in Notepad" (`monitor/keys.rs`) uses `notepad.exe` and
-    ignores the spawn error: use `xdg-open` on Linux, report failures.
-  - Help text says "COM port": show `/dev/ttyUSB0` / `/dev/ttyACM0` on Linux.
-  - Serial "permission denied" on Linux explains the `dialout` group
-    (`uucp` on Arch).
-  - `link.rs` "Windows refused the port" message is Windows-only.
-  - arboard `wayland-data-control` feature for native Wayland clipboard.
-  - App identity: `src/app/identity.rs` with `APP_ID = "info.brumley.rawtap"`
-    and its unit test; launcher `packaging/info.brumley.rawtap.desktop`
-    (`Terminal=true`); a 256 px app icon.
+- **App icon:** a 256 px `rawtap` icon for the launcher, the install page
+  and the brumley.info card (needed by the release pipeline).
 
 ## Next
 

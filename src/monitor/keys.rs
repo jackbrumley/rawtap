@@ -79,13 +79,40 @@ impl Monitor {
             }
             Cmd::OpenTranscript => match &self.transcript {
                 Some(t) => {
-                    let _ = std::process::Command::new("notepad.exe")
-                        .arg(&t.path)
-                        .spawn();
-                    self.set_status("Opened the transcript in Notepad", false);
+                    let path = t.path.clone();
+                    match crate::opener::open(&path) {
+                        Ok(()) => self.set_status("Opened the transcript", false),
+                        Err(error) => self.report_error(error),
+                    }
                 }
                 None => self.set_status("No transcript: logging is off for this session", true),
             },
+            Cmd::CopySessionLog => match crate::session_log::path() {
+                Some(path) => match std::fs::read_to_string(path) {
+                    Ok(text) => match crate::clip::set(&text) {
+                        Ok(()) => self.set_status("Copied the session log", false),
+                        Err(error) => self.report_error(error),
+                    },
+                    Err(error) => {
+                        self.report_error(format!("Could not read {}: {error}", path.display()))
+                    }
+                },
+                None => self.report_error("The session log isn't running".into()),
+            },
+            Cmd::OpenLogFolder => match crate::session_log::path().and_then(|p| p.parent()) {
+                Some(dir) => match crate::opener::open(dir) {
+                    Ok(()) => self.set_status("Opened the log folder", false),
+                    Err(error) => self.report_error(error),
+                },
+                None => self.report_error("The session log isn't running".into()),
+            },
+            Cmd::CopySystemInfo => {
+                let summary = crate::system_info::SystemInfo::collect().summary();
+                match crate::clip::set(&summary) {
+                    Ok(()) => self.set_status("Copied the system info", false),
+                    Err(error) => self.report_error(error),
+                }
+            }
             Cmd::Reconnect => return Action::Reconnect,
             Cmd::NewConnection => return Action::NewConnection,
             Cmd::Quit => return Action::Quit,
@@ -154,6 +181,14 @@ impl Monitor {
             Setting::LogFollow => {
                 self.run_cmd(Cmd::PauseLog);
             }
+            Setting::LogLevel => {
+                let level = menu::step(&crate::session_log::LEVELS, log::max_level(), dir);
+                crate::session_log::set_level(level);
+                self.set_status(
+                    format!("Log level: {}", crate::session_log::level_name(level)),
+                    false,
+                );
+            }
         }
     }
 
@@ -172,7 +207,13 @@ impl Monitor {
         };
         match Logger::create(&dir, self.settings.kind(), &self.settings.describe()) {
             Ok(l) => {
-                self.transcript = Transcript::create(&l.path).ok();
+                self.transcript = match Transcript::create(&l.path) {
+                    Ok(t) => Some(t),
+                    Err(error) => {
+                        self.report_error(format!("Could not create the transcript: {error}"));
+                        None
+                    }
+                };
                 let p = l.path.display().to_string();
                 self.logger = Some(l);
                 self.push(EntryKind::Info(format!("Logging to {p}")));

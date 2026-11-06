@@ -84,8 +84,14 @@ saying why.
   never logged, kept in history or written to a capture.
 - **Platforms:** RawTap ships for Linux and Windows. Port names, file
   openers and error messages must work on both (`/dev/ttyUSB0` and `COM3`).
-- **Silent failures:** log every error and, when relevant, show it on the
-  status line.
+- **Paths:** only `src/paths.rs` calls `dirs::`. Everything lives in
+  `~/.config/rawtap` on every platform.
+- **JSON files:** `settings.json` and `state.json` are read and written only
+  through `src/json_store.rs` (atomic writes; an unparseable file is set
+  aside, an unreadable one stops start-up).
+- **Silent failures:** log every error (`log::warn!` / `log::error!`, into the
+  session log) and, when relevant, show it on the status line
+  (`Monitor::report_error`).
 - **Documentation:** never document commands or files that don't exist.
 
 ### Working in This Repo
@@ -99,7 +105,20 @@ saying why.
 
 ## Project Layout
 
-- `src/main.rs`: command line (clap) and start-up.
+- `src/main.rs`: panic hook, command line (clap), start-up (`start`: the
+  move from 0.6.0's locations, the session log, state and settings), the
+  TUI loop.
+- `src/paths.rs`: every on-disk location, and the one-time move of 0.6.0's
+  `rawtap_config.json` / `rawtap_state.json` from next to the executable.
+- `src/json_store.rs`: atomic JSON writes and the unparseable-file rule.
+- `src/session_log.rs`: the session log (`debug/session.log`, the previous
+  run kept as `last-session.log`), log levels and the panic hook.
+- `src/system_info.rs`: the log header, F1 → Debug → Copy system info and
+  `rawtap --system-info`.
+- `src/opener.rs`: opening a file or folder (Notepad / Explorer on Windows,
+  `xdg-open` on Linux).
+- `src/app/identity.rs`: `APP_ID` and its tests; the launcher is
+  `packaging/info.brumley.rawtap.desktop` (`Terminal=true`).
 - `src/app.rs`, `src/ui.rs`: the start screen and app wiring.
 - `src/monitor.rs`: the monitor's state (raw log, terminal, send box,
   macros); `src/monitor/view.rs` (panes, mouse, copy and paste) and
@@ -127,8 +146,16 @@ saying why.
   the status line.
 - **Checks:** no frontend, so no `typecheck`, `lint` or frontend build. The
   root `package.json` holds only repository scripts and has no version.
-- **Settings layout:** the F1 menu is the settings screen, in the standard
-  order: General, Updates, RawTap's own sections, Debug.
+- **Settings layout:** the F1 menu is the settings screen; Debug (Copy log,
+  Open log folder, Copy system info, Log level) is its last section. Updates
+  joins it with the in-app updater.
+- **Settings and state:** `settings.json` is edited by hand (macros,
+  folders, image extraction) and only read by RawTap, which writes the
+  starter template when it's missing. Everything RawTap changes itself,
+  including the log level, is in `state.json`.
+- **Start-up errors:** there is no window for a native dialog, so an
+  unreadable file is printed to the terminal before the TUI starts, and
+  RawTap waits for Enter, then exits.
 
 ### From the Release and Update Standard
 

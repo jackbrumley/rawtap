@@ -402,7 +402,7 @@ pub(super) fn draw_help(f: &mut Frame) {
         l(
             "  rawtap serial -p COM3 -b 9600  ·  rawtap tcp -H 10.0.0.5 -p 2101  ·  rawtap listen -p 9000",
         ),
-        l("  rawtap ports  (list COM ports)  ·   --no-log  skip log files"),
+        l("  rawtap ports  (list serial ports)  ·   --no-log  skip log files"),
         l(""),
         Line::from(Span::styled("  Any key closes this.", DIM)),
     ];

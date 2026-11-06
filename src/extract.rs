@@ -1,7 +1,8 @@
 //! Pulls framed payloads (e.g. scanner BMP images) out of the byte stream.
 //! Frame: [magic ... header_length bytes, with a size field at size_offset] [payload of that size].
 
-use crate::config::{ExtractConfig, Paths};
+use crate::config::ExtractConfig;
+use crate::paths::Paths;
 use std::path::PathBuf;
 
 pub enum ExtractEvent {
@@ -163,11 +164,7 @@ mod tests {
     use super::*;
 
     fn test_extractor(dir: &std::path::Path) -> Extractor {
-        let paths = Paths {
-            base: dir.to_path_buf(),
-            config_file: dir.join("c.json"),
-            state_file: dir.join("s.json"),
-        };
+        let paths = Paths::at(dir.to_path_buf());
         let cfg = ExtractConfig {
             output_directory: dir.display().to_string(),
             ..Default::default()

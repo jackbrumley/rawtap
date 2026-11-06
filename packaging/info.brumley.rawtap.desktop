@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=RawTap
+Comment=See and send raw serial and TCP data, in hex and text
+Exec=rawtap
+Icon=rawtap
+Terminal=true
+Categories=Development;Utility;
+Keywords=serial;tcp;console;hex;terminal;switch;
+StartupNotify=false

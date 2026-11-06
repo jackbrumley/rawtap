@@ -349,20 +349,23 @@ impl Transcript {
         })
     }
 
-    pub fn feed(&mut self, data: &[u8]) {
+    pub fn feed(&mut self, data: &[u8]) -> std::io::Result<()> {
         let mut out = String::new();
         self.cleaner.feed(data, &mut out);
-        if !out.is_empty() {
-            let _ = self.file.write_all(out.as_bytes());
+        if out.is_empty() {
+            return Ok(());
         }
+        self.file.write_all(out.as_bytes())
     }
 }
 
 impl Drop for Transcript {
     fn drop(&mut self) {
         let p = self.cleaner.partial();
-        if !p.is_empty() {
-            let _ = writeln!(self.file, "{p}");
+        if !p.is_empty()
+            && let Err(error) = writeln!(self.file, "{p}")
+        {
+            log::warn!("Could not finish {}: {error}", self.path.display());
         }
     }
 }

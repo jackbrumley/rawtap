@@ -1,10 +1,13 @@
 //! Application state: the setup screen, switching to the monitor, and saved state.
 
-use crate::config::{self, Config, ConnMode, Paths, Saved};
+pub mod identity;
+
+use crate::config::{self, Config, ConnMode, Saved};
 use crate::extract::Extractor;
 use crate::link::{Link, LinkEvent, LinkSettings};
 use crate::logger::Logger;
 use crate::monitor::{Action, EntryKind, Monitor};
+use crate::paths::Paths;
 use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use serialport::{DataBits, FlowControl, Parity, StopBits};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -46,7 +49,7 @@ impl Field {
     pub fn label(self) -> &'static str {
         match self {
             Field::Mode => "Connection",
-            Field::SerialPort => "COM port",
+            Field::SerialPort => "Serial port",
             Field::Baud => "Baud rate",
             Field::DataBits => "Data bits",
             Field::Parity => "Parity",
@@ -69,10 +72,10 @@ impl Field {
     pub fn description(self) -> &'static str {
         match self {
             Field::Mode => {
-                "Serial: a COM port (USB adapter or console cable). TCP client: connect out to an IP and port. TCP server: wait for a device to connect to this PC."
+                "Serial: a serial port (USB adapter or console cable). TCP client: connect out to an IP and port. TCP server: wait for a device to connect to this computer."
             }
             Field::SerialPort => {
-                "The serial port to open. ←→ cycles through the ports detected on this PC, or type a name such as COM3."
+                "The serial port to open. ←→ cycles through the ports detected on this computer, or type a name such as COM3 (Windows) or /dev/ttyUSB0 (Linux)."
             }
             Field::Baud => {
                 "Speed of the serial line; it must match the device. Switch consoles are usually 9600 or 115200. ←→ for common speeds, or type one."
@@ -90,10 +93,10 @@ impl Field {
                 "Port number on that host, e.g. a terminal server's raw TCP port for the device."
             }
             Field::Bind => {
-                "Which address on this PC to listen on. 0.0.0.0 means all network adapters."
+                "Which address on this computer to listen on. 0.0.0.0 means all network adapters."
             }
             Field::ListenPort => {
-                "Port devices will connect to on this PC. Windows Firewall may need to allow it."
+                "Port devices will connect to on this computer. A firewall may need to allow it."
             }
             Field::Logging => {
                 "Write a hex log and a plain-text transcript of the session to the logs folder."
@@ -221,7 +224,7 @@ pub fn form_profile_key(s: &Saved) -> String {
             .unwrap_or_else(|_| p.trim().to_string())
     };
     match s.mode {
-        ConnMode::Serial => format!("serial:{}", s.serial_port.trim().to_uppercase()),
+        ConnMode::Serial => format!("serial:{}", serial_key(s.serial_port.trim())),
         ConnMode::Tcp => format!("tcp:{}:{}", s.tcp_host.trim(), port(&s.tcp_port)),
         ConnMode::Listen => format!("listen:{}", port(&s.listen_port)),
     }
@@ -230,9 +233,19 @@ pub fn form_profile_key(s: &Saved) -> String {
 /// Key for remembering view settings per connection, e.g. "serial:COM22".
 pub fn profile_key(s: &LinkSettings) -> String {
     match s {
-        LinkSettings::Serial { port, .. } => format!("serial:{}", port.to_uppercase()),
+        LinkSettings::Serial { port, .. } => format!("serial:{}", serial_key(port)),
         LinkSettings::TcpClient { host, port } => format!("tcp:{host}:{port}"),
         LinkSettings::TcpListen { port, .. } => format!("listen:{port}"),
+    }
+}
+
+/// Windows port names are case-insensitive (com3 is COM3); Linux device paths
+/// are case-sensitive and kept as they are.
+fn serial_key(port: &str) -> String {
+    if cfg!(windows) {
+        port.to_uppercase()
+    } else {
+        port.to_string()
     }
 }
 
@@ -247,7 +260,7 @@ pub fn settings_from_saved(s: &Saved) -> Result<LinkSettings, String> {
         ConnMode::Serial => {
             let port = s.serial_port.trim().to_string();
             if port.is_empty() {
-                return Err("Pick a COM port (←/→ cycles through the detected ones).".into());
+                return Err("Pick a serial port (←/→ cycles through the detected ones).".into());
             }
             let baud = match s.baud.trim().parse::<u32>() {
                 Ok(b) if b > 0 => b,
@@ -554,7 +567,7 @@ impl App {
         self.monitor = Some(m);
         self.screen = Screen::Monitor;
         self.setup.error = None;
-        self.store_state();
+        self.store_state_reporting();
         crate::set_title(&format!("RawTap - {}", settings.describe()));
     }
 
@@ -591,19 +604,36 @@ impl App {
         while self.rx.try_recv().is_ok() {}
     }
 
-    pub fn store_state(&mut self) {
+    /// Saves `state.json`: remembered connections, per-connection settings,
+    /// history and the log level.
+    pub fn store_state(&mut self) -> Result<(), String> {
         if let Some(m) = &self.monitor {
             self.saved.history = m.history.clone();
             self.saved
                 .profiles
                 .insert(m.profile_key.clone(), m.profile.clone());
         }
-        config::store_saved(&self.paths, &self.saved);
+        self.saved.log_level = crate::session_log::level_name(log::max_level()).into();
+        config::store_saved(&self.paths, &self.saved).inspect_err(|error| log::error!("{error}"))
     }
 
-    pub fn shutdown(&mut self) {
-        self.store_state();
+    /// Saves state while the TUI runs, showing a failure where the user is
+    /// looking.
+    fn store_state_reporting(&mut self) {
+        if let Err(error) = self.store_state() {
+            match self.monitor.as_mut() {
+                Some(m) => m.report_error(error),
+                None => self.setup.error = Some(error),
+            }
+        }
+    }
+
+    /// Saves state and closes the connection. A failed save is returned so
+    /// `main` can print it once the terminal is back to normal.
+    pub fn shutdown(&mut self) -> Result<(), String> {
+        let saved = self.store_state();
         self.close_monitor();
+        saved
     }
 
     pub fn on_event(&mut self, ev: Event) {
@@ -635,7 +665,7 @@ impl App {
                     Action::Reconnect => self.reconnect(),
                     Action::NewConnection => {
                         self.close_monitor();
-                        self.store_state();
+                        self.store_state_reporting();
                         self.screen = Screen::Setup;
                         self.setup.focus = 0;
                         self.rescan_ports();
