@@ -1,9 +1,15 @@
 {
   "name": "rawtap",
   "private": true,
-  "description": "Repository scripts for RawTap: the file size check and (from the release pipeline on) the release tooling. The app's version lives only in Cargo.toml.",
+  "description": "Repository scripts for RawTap: the file size check and the release tooling. The app's version lives only in Cargo.toml.",
   "type": "module",
   "scripts": {
-    "check:structure": "node scripts/check-file-lines.mjs"
+    "check:structure": "node scripts/check-file-lines.mjs",
+    "release:linux": "node scripts/build-linux-release.mjs",
+    "release:windows": "node scripts/build-windows-release.mjs",
+    "release:prepare": "node scripts/prepare-release.mjs",
+    "release:notes": "node scripts/release-notes-template.mjs",
+    "release:verify": "node scripts/verify-release.mjs",
+    "release:promote": "node scripts/promote-release.mjs"
   }
 }

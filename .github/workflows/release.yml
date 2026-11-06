@@ -1,0 +1,151 @@
+# Builds every release asset on GitHub and attaches it to a pre-release.
+#
+#   Tag push (vX.Y.Z): creates the pre-release (notes skeleton from
+#     release-notes-template.mjs), builds Linux and Windows in parallel,
+#     uploads each platform's assets, then verifies the release is complete.
+#     Promotion to latest stays a deliberate step: npm run release:promote.
+#   Manual run (Actions tab or `gh workflow run release.yml --ref <branch>`):
+#     a dry run that builds and packages all platforms and keeps the files as
+#     workflow artifacts, without touching any release.
+#
+# Asset names come only from scripts/release-assets.mjs via package-release.mjs.
+# See docs/RELEASE.md and the Release and Update Standard.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PUBLISH: ${{ github.event_name == 'push' }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - name: Read release version
+        id: version
+        run: |
+          tag="v$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n1)"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "Release version: ${tag}"
+
+      - name: Check tag matches the configured version
+        if: env.PUBLISH == 'true'
+        run: |
+          if [[ "${GITHUB_REF_NAME}" != "${{ steps.version.outputs.tag }}" ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match the Cargo.toml version ${{ steps.version.outputs.tag }}. Use npm run release:prepare."
+            exit 1
+          fi
+
+      - name: Create pre-release
+        if: env.PUBLISH == 'true'
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "Release $tag already exists; reusing it."
+          else
+            npm run --silent release:notes > release-notes.md
+            gh release create "$tag" --verify-tag --prerelease --title "$tag" --notes-file release-notes.md
+          fi
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            runner: ubuntu-24.04
+          - name: Windows
+            runner: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      # Linux builds inside the pinned Ubuntu 22.04 container (glibc floor),
+      # exactly as a local `npm run release:linux` does.
+      - name: Build Linux packages
+        if: runner.os == 'Linux'
+        run: npm run release:linux
+
+      # Installs the version pinned in rust-toolchain.toml.
+      - name: Install Rust toolchain
+        if: runner.os == 'Windows'
+        shell: bash
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        if: runner.os == 'Windows'
+
+      # NSIS for setup.exe, WiX 5 for the MSI (scripts/build-windows-release.mjs).
+      - name: Install Windows installer tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue) -and
+              -not (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
+            choco install nsis --no-progress -y
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+          dotnet tool install --global wix --version 5.0.2
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Build Windows installers
+        if: runner.os == 'Windows'
+        shell: bash
+        run: npm run release:windows
+
+      - name: Package release assets
+        shell: bash
+        run: node scripts/package-release.mjs
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.name }}
+          path: release-artifacts/*
+          retention-days: 14
+
+      - name: Upload to release
+        if: env.PUBLISH == 'true'
+        shell: bash
+        run: gh release upload "${{ needs.prepare.outputs.tag }}" release-artifacts/* --clobber
+
+  verify:
+    name: Verify release
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - run: node scripts/verify-release.mjs

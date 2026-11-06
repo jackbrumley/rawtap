@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <clipPath id="window"><rect x="12" y="28" width="232" height="200" rx="30"/></clipPath>
+  </defs>
+  <!-- Terminal window -->
+  <rect x="12" y="28" width="232" height="200" rx="30" fill="#1b2330"/>
+  <rect x="12" y="28" width="232" height="40" fill="#f59e0b" clip-path="url(#window)"/>
+  <!-- Raw serial data: a square-wave signal -->
+  <polyline points="38,146 66,146 66,104 106,104 106,146 134,146 134,104 174,104 174,146 218,146"
+            fill="none" stroke="#34d399" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Console prompt -->
+  <polyline points="42,174 62,190 42,206" fill="none" stroke="#e5e7eb" stroke-width="12"
+            stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="76" y="198" width="38" height="11" rx="5.5" fill="#e5e7eb"/>
+</svg>

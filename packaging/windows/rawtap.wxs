@@ -1,0 +1,39 @@
+<!--
+  RawTap system-wide installer (MSI), built by scripts/build-windows-release.mjs
+  with WiX 5:
+    wix build -arch x64 -d Version=X.Y.Z -d BinaryFile=... -d IconFile=... rawtap.wxs
+  Installs to Program Files\rawtap for all users (admin), adds that folder to
+  the system PATH and a Start menu shortcut. docs/install-system.ps1 runs it
+  with msiexec /qn.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!-- UpgradeCode identifies RawTap to Windows Installer: never change it. -->
+  <Package Name="RawTap" Manufacturer="Jack Brumley" Version="$(var.Version)"
+           UpgradeCode="9B430E50-7BBF-4EEE-9930-EF568BC57BBF" Scope="perMachine" Compressed="yes">
+    <!-- Re-running the installer for the same version (an update check that
+         reinstalls) replaces it instead of failing. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of RawTap is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="RawTapIcon" SourceFile="$(var.IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="RawTapIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://brumley.info/rawtap" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="rawtap" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <Feature Id="Main" Title="RawTap">
+      <Component Directory="INSTALLFOLDER">
+        <File Id="RawTapExe" Source="$(var.BinaryFile)" Name="rawtap.exe" KeyPath="yes">
+          <Shortcut Id="RawTapShortcut" Name="RawTap" Directory="ProgramMenuFolder"
+                    WorkingDirectory="INSTALLFOLDER" Icon="RawTapIcon" />
+        </File>
+        <Environment Id="RawTapPath" Name="PATH" Value="[INSTALLFOLDER]" Part="last"
+                     Action="set" System="yes" Permanent="no" />
+      </Component>
+    </Feature>
+  </Package>
+</Wix>

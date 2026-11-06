@@ -1,6 +1,6 @@
 # Checks every push to dev/main and every pull request (App Standard
 # section 7): the pre-submit checklist from AGENTS.md on each platform RawTap
-# ships (Linux and Windows). RawTap is a terminal app with no frontend, so
+# ships (Linux and Windows), plus `bash -n` on the shell scripts. RawTap is a terminal app with no frontend, so
 # there is no typecheck, lint or frontend build. Release builds are made only
 # by release.yml.
 name: CI
@@ -65,3 +65,7 @@ jobs:
 
       - name: cargo test
         run: cargo test
+
+      - name: Check shell script syntax
+        if: runner.os == 'Linux'
+        run: bash -n packaging/linux/build-in-container.sh

@@ -61,7 +61,8 @@ warnings:
 3. `cargo clippy --all-targets -- -D warnings`
 4. `cargo test`
 
-CI (`.github/workflows/ci.yml`, Linux and Windows) runs the same checks.
+CI (`.github/workflows/ci.yml`, Linux and Windows) runs the same checks
+plus `bash -n` on the shell scripts.
 Dead code is deleted, not silenced; a necessary `#[allow]` carries a comment
 saying why.
 
@@ -132,9 +133,17 @@ saying why.
   `src/extract.rs`, `src/logger.rs`, `src/config.rs`: hex/text codec,
   macros, menu items, clipboard, image extraction, the traffic log, config.
 - `src/switch_sim.rs`: end-to-end test against a fake Cisco-style switch.
-- `scripts/check-file-lines.mjs`: the file size check.
+- `scripts/`: the file size check (`check-file-lines.mjs`) and the release
+  tooling (`release:*` npm scripts; asset names only from
+  `release-assets.mjs`).
+- `packaging/`: the launcher (`info.brumley.rawtap.desktop`), icons
+  (`icons/rawtap.svg` is the source; the PNGs and `rawtap.ico` are rendered
+  from it), the Linux build container (`linux/`) and the Windows installers
+  (`windows/rawtap.nsi`, `windows/rawtap.wxs`, `windows/path-helper.ps1`).
 - `.github/workflows/ci.yml`: the pre-submit checks on every push and pull
   request, on Linux and Windows.
+- `.github/workflows/release.yml`: builds and verifies releases.
+- `docs/RELEASE.md`: the release procedure.
 - `docs/TODO.md`: known bugs and planned work (Now / Next / Ideas).
 
 ## Variations
@@ -164,6 +173,15 @@ saying why.
   from `main:/docs`). Platforms: Linux x64 and Windows x64.
 - **Version file:** only `Cargo.toml` (no `package.json` or
   `tauri.conf.json` version).
-- **Packaging:** not a Tauri app, so the standard five assets are built with
-  Rust packaging tools instead of Tauri's bundler.
+- **Packaging:** not a Tauri app, so the standard five assets are built
+  without Tauri's bundler. Linux (`npm run release:linux`, in the Ubuntu
+  22.04 container): one staged install tree packed by `dpkg-deb`, `rpmbuild`
+  and `appimagetool` (pinned 1.9.1); the AppImage bundles nothing but the
+  binary (glibc and libudev come from the host). Windows
+  (`npm run release:windows`, an extra script): NSIS `setup.exe` (per user,
+  `%LOCALAPPDATA%\rawtap`, added to the user PATH by `path-helper.ps1`)
+  and a WiX 5 MSI (system-wide, `Program Files\rawtap`, system PATH). The
+  MSI `UpgradeCode` in `rawtap.wxs` never changes.
+- **Release procedure:** follow `docs/RELEASE.md`. Never run
+  `npm run release:promote` unless the maintainer asks.
 - **In-app update:** the standard's "Terminal apps" flow.
