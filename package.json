@@ -1,0 +1,9 @@
+{
+  "name": "rawtap",
+  "private": true,
+  "description": "Repository scripts for RawTap: the file size check and (from the release pipeline on) the release tooling. The app's version lives only in Cargo.toml.",
+  "type": "module",
+  "scripts": {
+    "check:structure": "node scripts/check-file-lines.mjs"
+  }
+}

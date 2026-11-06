@@ -19,7 +19,10 @@ pub fn byte_text(b: u8) -> String {
 }
 
 pub fn hex_string(data: &[u8]) -> String {
-    data.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ")
+    data.iter()
+        .map(|b| format!("{b:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 pub fn text_string(data: &[u8]) -> String {
@@ -144,7 +147,9 @@ pub fn parse_ascii(input: &str) -> Result<Vec<u8>, String> {
                     }
                 }
                 other => {
-                    return Err(format!("unknown escape \\{other} (use \\\\ for a backslash)"));
+                    return Err(format!(
+                        "unknown escape \\{other} (use \\\\ for a backslash)"
+                    ));
                 }
             }
             continue;
@@ -227,9 +232,15 @@ mod tests {
 
     #[test]
     fn encode_line_endings() {
-        assert_eq!(encode("OK", InputMode::Ascii, LineEnding::Crlf).unwrap(), b"OK\r\n");
+        assert_eq!(
+            encode("OK", InputMode::Ascii, LineEnding::Crlf).unwrap(),
+            b"OK\r\n"
+        );
         assert_eq!(encode("", InputMode::Ascii, LineEnding::Cr).unwrap(), b"\r");
-        assert_eq!(encode("4F 4B", InputMode::Hex, LineEnding::Crlf).unwrap(), b"OK");
+        assert_eq!(
+            encode("4F 4B", InputMode::Hex, LineEnding::Crlf).unwrap(),
+            b"OK"
+        );
     }
 
     #[test]

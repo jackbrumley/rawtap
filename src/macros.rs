@@ -31,13 +31,17 @@ impl KeyCombo {
                 return Err(format!("no such key F{n}"));
             }
             if mods.is_empty() && n <= 10 {
-                return Err(format!("F{n} is a built-in key; use F11, F12, Shift+F{n} or Alt+0..9"));
+                return Err(format!(
+                    "F{n} is a built-in key; use F11, F12, Shift+F{n} or Alt+0..9"
+                ));
             }
             KeyCode::F(n)
         } else if last.chars().count() == 1 && !mods.is_empty() {
             let c = last.chars().next().unwrap();
             if mods.contains(KeyModifiers::CONTROL) && !mods.contains(KeyModifiers::ALT) {
-                return Err("Ctrl+<key> macros would clash with editing and live keys; use Alt".into());
+                return Err(
+                    "Ctrl+<key> macros would clash with editing and live keys; use Alt".into(),
+                );
             }
             KeyCode::Char(c.to_ascii_lowercase())
         } else {
@@ -52,7 +56,8 @@ impl KeyCombo {
             c => c,
         };
         // Shift on a letter is reported in the char itself; ignore it for char keys.
-        let mut mods = k.modifiers & (KeyModifiers::ALT | KeyModifiers::SHIFT | KeyModifiers::CONTROL);
+        let mut mods =
+            k.modifiers & (KeyModifiers::ALT | KeyModifiers::SHIFT | KeyModifiers::CONTROL);
         if matches!(code, KeyCode::Char(_)) {
             mods.remove(KeyModifiers::SHIFT);
         }
@@ -102,15 +107,24 @@ pub fn load(defs: &[Macro]) -> (Vec<LoadedMacro>, Vec<String>) {
             continue;
         }
         if d.data.is_none() && d.steps.is_empty() {
-            warnings.push(format!("Macro '{}' skipped: needs \"data\" or \"steps\"", d.key));
+            warnings.push(format!(
+                "Macro '{}' skipped: needs \"data\" or \"steps\"",
+                d.key
+            ));
             continue;
         }
         let label = if !d.label.is_empty() {
             d.label.clone()
         } else {
-            d.data.clone().unwrap_or_else(|| format!("{} steps", d.steps.len()))
+            d.data
+                .clone()
+                .unwrap_or_else(|| format!("{} steps", d.steps.len()))
         };
-        out.push(LoadedMacro { key, label, def: d.clone() });
+        out.push(LoadedMacro {
+            key,
+            label,
+            def: d.clone(),
+        });
     }
     (out, warnings)
 }
@@ -147,7 +161,11 @@ impl MacroRun {
         let d = &m.def;
         let mut actions = Vec::new();
         let ascii = |text: &str, le: Option<LineEnding>| -> Result<Vec<u8>, String> {
-            codec::encode(text, InputMode::Ascii, le.or(d.line_ending).unwrap_or(current_ending))
+            codec::encode(
+                text,
+                InputMode::Ascii,
+                le.or(d.line_ending).unwrap_or(current_ending),
+            )
         };
         if let Some(data) = &d.data {
             let bytes = match d.mode {
@@ -168,10 +186,16 @@ impl MacroRun {
                 actions.push(Action::Send(codec::parse_hex(h)?));
             }
             if let Some(w) = &s.wait {
-                actions.push(Action::Wait { text: w.clone(), timeout });
+                actions.push(Action::Wait {
+                    text: w.clone(),
+                    timeout,
+                });
             }
             if let Some(ms) = s.wait_idle_ms {
-                actions.push(Action::WaitIdle { idle: Duration::from_millis(ms), timeout });
+                actions.push(Action::WaitIdle {
+                    idle: Duration::from_millis(ms),
+                    timeout,
+                });
             }
         }
         let now = Instant::now();
@@ -229,7 +253,9 @@ impl MacroRun {
                 Poll::Pending
             }
             Action::Wait { text, timeout } => {
-                if self.seen_text.contains(text.as_str()) || self.seen.partial().contains(text.as_str()) {
+                if self.seen_text.contains(text.as_str())
+                    || self.seen.partial().contains(text.as_str())
+                {
                     self.advance();
                     return self.poll();
                 }
@@ -276,8 +302,16 @@ mod tests {
             key: "Alt+9".into(),
             capture: true,
             steps: vec![
-                Step { send: Some("terminal length 0".into()), wait: Some("#".into()), ..Default::default() },
-                Step { send: Some("show run".into()), wait: Some("Switch#".into()), ..Default::default() },
+                Step {
+                    send: Some("terminal length 0".into()),
+                    wait: Some("#".into()),
+                    ..Default::default()
+                },
+                Step {
+                    send: Some("show run".into()),
+                    wait: Some("Switch#".into()),
+                    ..Default::default()
+                },
             ],
             ..Default::default()
         };
@@ -295,7 +329,9 @@ mod tests {
         run.on_rx(b"show run\r\nhostname Switch\r\n");
         assert!(matches!(run.poll(), Poll::Pending));
         run.on_rx(b"end\r\nSwitch#");
-        let Poll::Done { capture: Some(c) } = run.poll() else { panic!() };
+        let Poll::Done { capture: Some(c) } = run.poll() else {
+            panic!()
+        };
         assert!(c.contains("hostname Switch\nend\nSwitch#"));
     }
 }

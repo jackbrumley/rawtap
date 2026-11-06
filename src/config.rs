@@ -41,7 +41,11 @@ impl Paths {
 
     pub fn resolve(&self, p: &str) -> PathBuf {
         let p = Path::new(p);
-        if p.is_absolute() { p.to_path_buf() } else { self.base.join(p) }
+        if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            self.base.join(p)
+        }
     }
 }
 
@@ -156,7 +160,10 @@ pub fn load(paths: &Paths) -> (Config, Vec<String>) {
     let mut notes = Vec::new();
     if !paths.config_file.is_file() {
         match std::fs::write(&paths.config_file, TEMPLATE) {
-            Ok(()) => notes.push(format!("Created starter config: {}", paths.config_file.display())),
+            Ok(()) => notes.push(format!(
+                "Created starter config: {}",
+                paths.config_file.display()
+            )),
             Err(e) => notes.push(format!("No config file and couldn't create one: {e}")),
         }
     }

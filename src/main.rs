@@ -8,11 +8,11 @@ mod logger;
 mod macros;
 mod menu;
 mod monitor;
+#[cfg(test)]
+mod switch_sim;
 mod term;
 mod ui;
 mod ui_monitor;
-#[cfg(test)]
-mod switch_sim;
 
 use app::App;
 use clap::{Parser, Subcommand};
@@ -78,7 +78,8 @@ enum Cmd {
 }
 
 pub fn set_title(t: &str) {
-    let _ = ratatui::crossterm::execute!(std::io::stdout(), ratatui::crossterm::terminal::SetTitle(t));
+    let _ =
+        ratatui::crossterm::execute!(std::io::stdout(), ratatui::crossterm::terminal::SetTitle(t));
 }
 
 fn capitalise(s: &str) -> String {
@@ -93,7 +94,14 @@ fn capitalise(s: &str) -> String {
 fn apply_cli(cmd: &Option<Cmd>, s: &mut config::Saved) -> bool {
     match cmd {
         None | Some(Cmd::Ports) => false,
-        Some(Cmd::Serial { port, baud, data_bits, parity, stop_bits, flow }) => {
+        Some(Cmd::Serial {
+            port,
+            baud,
+            data_bits,
+            parity,
+            stop_bits,
+            flow,
+        }) => {
             s.mode = ConnMode::Serial;
             if let Some(b) = baud {
                 s.baud = b.to_string();
@@ -182,16 +190,25 @@ fn main() {
     let mut terminal = ratatui::init();
     // RawTap handles the mouse itself (wheel scrolling, selection) so the console doesn't turn
     // the wheel into arrow keys for the device. Shift+drag still uses the console's selection.
-    let _ = ratatui::crossterm::execute!(std::io::stdout(), ratatui::crossterm::event::EnableMouseCapture);
+    let _ = ratatui::crossterm::execute!(
+        std::io::stdout(),
+        ratatui::crossterm::event::EnableMouseCapture
+    );
     let prev_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let _ = ratatui::crossterm::execute!(std::io::stdout(), ratatui::crossterm::event::DisableMouseCapture);
+        let _ = ratatui::crossterm::execute!(
+            std::io::stdout(),
+            ratatui::crossterm::event::DisableMouseCapture
+        );
         prev_hook(info);
     }));
     set_title("RawTap");
     let result = run(&mut terminal, &mut app);
     app.shutdown();
-    let _ = ratatui::crossterm::execute!(std::io::stdout(), ratatui::crossterm::event::DisableMouseCapture);
+    let _ = ratatui::crossterm::execute!(
+        std::io::stdout(),
+        ratatui::crossterm::event::DisableMouseCapture
+    );
     ratatui::restore();
     set_title("");
 
@@ -205,8 +222,8 @@ fn main() {
 #[cfg(test)]
 mod screen_tests {
     use super::*;
-    use ratatui::{Terminal, backend::TestBackend};
     use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+    use ratatui::{Terminal, backend::TestBackend};
     use std::io::{Read, Write};
 
     fn key(app: &mut App, code: KeyCode) {
@@ -221,7 +238,9 @@ mod screen_tests {
         let buf = t.backend().buffer();
         println!("===== {title}");
         for y in 0..buf.area.height {
-            let row: String = (0..buf.area.width).map(|x| buf[(x, y)].symbol().to_string()).collect();
+            let row: String = (0..buf.area.width)
+                .map(|x| buf[(x, y)].symbol().to_string())
+                .collect();
             println!("{}", row.trim_end());
         }
     }
@@ -236,14 +255,20 @@ mod screen_tests {
             s.write_all(b"\x02HELLO\x03\r\n").unwrap();
             let mut buf = [0u8; 256];
             while let Ok(n) = s.read(&mut buf) {
-                if n == 0 { break; }
+                if n == 0 {
+                    break;
+                }
                 s.write_all(&buf[..n]).unwrap();
             }
         });
 
         let dir = std::env::temp_dir().join(format!("rawtap_ui_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let paths = config::Paths { base: dir.clone(), config_file: dir.join(config::CONFIG_NAME), state_file: dir.join(config::STATE_NAME) };
+        let paths = config::Paths {
+            base: dir.clone(),
+            config_file: dir.join(config::CONFIG_NAME),
+            state_file: dir.join(config::STATE_NAME),
+        };
         let (cfg, notes) = config::load(&paths);
         let saved = config::Saved::default();
         let mut app = App::new(cfg, paths, saved, notes, false);
@@ -281,9 +306,17 @@ mod screen_tests {
         t.draw(|f| ui::draw(f, &mut app)).unwrap();
         dump(&t, "help");
         app.shutdown();
-        let logs = std::fs::read_dir(dir.join("logs")).unwrap().next().unwrap().unwrap().path();
+        let logs = std::fs::read_dir(dir.join("logs"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
         println!("===== log file\n{}", std::fs::read_to_string(logs).unwrap());
-        println!("===== state\n{}", std::fs::read_to_string(dir.join(config::STATE_NAME)).unwrap());
+        println!(
+            "===== state\n{}",
+            std::fs::read_to_string(dir.join(config::STATE_NAME)).unwrap()
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

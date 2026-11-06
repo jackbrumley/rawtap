@@ -52,7 +52,10 @@ impl Extractor {
             _ => {
                 return (
                     Extractor::disabled(),
-                    format!("Image extraction disabled: bad header_magic '{}'", cfg.header_magic),
+                    format!(
+                        "Image extraction disabled: bad header_magic '{}'",
+                        cfg.header_magic
+                    ),
                 );
             }
         };
@@ -136,10 +139,16 @@ impl Extractor {
 
     fn save(&self, payload: &[u8]) -> ExtractEvent {
         let ts = chrono::Local::now().format("%Y%m%d_%H%M%S_%3f");
-        let path = self.output_dir.join(format!("{}{}.{}", self.prefix, ts, self.ext));
-        let result = std::fs::create_dir_all(&self.output_dir).and_then(|_| std::fs::write(&path, payload));
+        let path = self
+            .output_dir
+            .join(format!("{}{}.{}", self.prefix, ts, self.ext));
+        let result =
+            std::fs::create_dir_all(&self.output_dir).and_then(|_| std::fs::write(&path, payload));
         match result {
-            Ok(()) => ExtractEvent::Saved { path, len: payload.len() },
+            Ok(()) => ExtractEvent::Saved {
+                path,
+                len: payload.len(),
+            },
             Err(e) => ExtractEvent::Failed(format!("Error saving extracted image: {e}")),
         }
     }
@@ -159,7 +168,10 @@ mod tests {
             config_file: dir.join("c.json"),
             state_file: dir.join("s.json"),
         };
-        let cfg = ExtractConfig { output_directory: dir.display().to_string(), ..Default::default() };
+        let cfg = ExtractConfig {
+            output_directory: dir.display().to_string(),
+            ..Default::default()
+        };
         Extractor::new(Some(&cfg), &paths).0
     }
 

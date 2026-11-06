@@ -19,7 +19,10 @@ pub struct Term {
 
 impl Term {
     pub fn new() -> Term {
-        Term { parser: vt100::Parser::new(nz(24), nz(80), SCROLLBACK), last_rx: 0 }
+        Term {
+            parser: vt100::Parser::new(nz(24), nz(80), SCROLLBACK),
+            last_rx: 0,
+        }
     }
 
     /// Feed received bytes. A bare LF also returns the cursor to column 0, so devices that
@@ -93,7 +96,11 @@ impl Term {
                 break;
             }
             let from = if r == start.0 { start.1 } else { 0 };
-            let to = if r == end.0 { (end.1 + 1).min(cols) } else { cols };
+            let to = if r == end.0 {
+                (end.1 + 1).min(cols)
+            } else {
+                cols
+            };
             let screen = self.parser.screen();
             out.push_str(screen.contents_between(vr, from, vr, to).trim_end());
             if r != end.0 && !screen.row_wrapped(vr) {
@@ -115,7 +122,10 @@ impl Term {
     /// kept out of the log.
     pub fn at_password_prompt(&self) -> bool {
         let t = self.text_before_cursor().trim_end().to_lowercase();
-        t.ends_with(':') && ["password", "passcode", "passphrase", "secret", "pin"].iter().any(|w| t.contains(w))
+        t.ends_with(':')
+            && ["password", "passcode", "passphrase", "secret", "pin"]
+                .iter()
+                .any(|w| t.contains(w))
     }
 }
 
@@ -155,7 +165,11 @@ pub fn key_bytes(k: &KeyEvent, app_cursor: bool, enter: &[u8]) -> Option<Vec<u8>
             v.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
             Some(v)
         }
-        KeyCode::Enter => Some(if enter.is_empty() { b"\r".to_vec() } else { enter.to_vec() }),
+        KeyCode::Enter => Some(if enter.is_empty() {
+            b"\r".to_vec()
+        } else {
+            enter.to_vec()
+        }),
         KeyCode::Backspace => Some(vec![0x7F]),
         KeyCode::Tab => Some(vec![0x09]),
         KeyCode::BackTab => csi("Z"),
@@ -174,7 +188,7 @@ pub fn key_bytes(k: &KeyEvent, app_cursor: bool, enter: &[u8]) -> Option<Vec<u8>
 
 // ---------------------------------------------------------------- plain text
 
-enum Esc {
+enum EscapeState {
     Normal,
     Esc,
     Csi(String),
@@ -187,13 +201,18 @@ enum Esc {
 pub struct TextCleaner {
     line: Vec<char>,
     col: usize,
-    state: Esc,
+    state: EscapeState,
     utf8: Vec<u8>,
 }
 
 impl Default for TextCleaner {
     fn default() -> Self {
-        TextCleaner { line: Vec::new(), col: 0, state: Esc::Normal, utf8: Vec::new() }
+        TextCleaner {
+            line: Vec::new(),
+            col: 0,
+            state: EscapeState::Normal,
+            utf8: Vec::new(),
+        }
     }
 }
 
@@ -201,29 +220,29 @@ impl TextCleaner {
     /// Process bytes; completed lines are appended to `out` with a trailing '\n'.
     pub fn feed(&mut self, data: &[u8], out: &mut String) {
         for &b in data {
-            match std::mem::replace(&mut self.state, Esc::Normal) {
-                Esc::Normal => self.normal(b, out),
-                Esc::Esc => match b {
-                    b'[' => self.state = Esc::Csi(String::new()),
-                    b']' => self.state = Esc::Osc,
+            match std::mem::replace(&mut self.state, EscapeState::Normal) {
+                EscapeState::Normal => self.normal(b, out),
+                EscapeState::Esc => match b {
+                    b'[' => self.state = EscapeState::Csi(String::new()),
+                    b']' => self.state = EscapeState::Osc,
                     _ => {}
                 },
-                Esc::Csi(mut params) => {
+                EscapeState::Csi(mut params) => {
                     if (0x40..=0x7E).contains(&b) {
                         self.csi(&params, b);
                     } else {
                         params.push(b as char);
-                        self.state = Esc::Csi(params);
+                        self.state = EscapeState::Csi(params);
                     }
                 }
-                Esc::Osc => match b {
+                EscapeState::Osc => match b {
                     0x07 => {}
-                    0x1B => self.state = Esc::OscEsc,
-                    _ => self.state = Esc::Osc,
+                    0x1B => self.state = EscapeState::OscEsc,
+                    _ => self.state = EscapeState::Osc,
                 },
-                Esc::OscEsc => {
+                EscapeState::OscEsc => {
                     if b != b'\\' {
-                        self.state = Esc::Osc;
+                        self.state = EscapeState::Osc;
                     }
                 }
             }
@@ -250,7 +269,7 @@ impl TextCleaner {
             return;
         }
         match b {
-            0x1B => self.state = Esc::Esc,
+            0x1B => self.state = EscapeState::Esc,
             b'\r' => self.col = 0,
             b'\n' => {
                 let s: String = self.line.iter().collect();
@@ -284,7 +303,11 @@ impl TextCleaner {
     }
 
     fn csi(&mut self, params: &str, fin: u8) {
-        let n = params.trim_start_matches('?').split(';').next().and_then(|p| p.parse::<usize>().ok());
+        let n = params
+            .trim_start_matches('?')
+            .split(';')
+            .next()
+            .and_then(|p| p.parse::<usize>().ok());
         match fin {
             b'K' => match n.unwrap_or(0) {
                 0 => self.line.truncate(self.col),
@@ -319,7 +342,11 @@ impl Transcript {
     pub fn create(log_path: &Path) -> std::io::Result<Transcript> {
         let path = log_path.with_extension("txt");
         let file = File::create(&path)?;
-        Ok(Transcript { file, cleaner: TextCleaner::default(), path })
+        Ok(Transcript {
+            file,
+            cleaner: TextCleaner::default(),
+            path,
+        })
     }
 
     pub fn feed(&mut self, data: &[u8]) {
@@ -396,15 +423,40 @@ mod tests {
     #[test]
     fn keys_encode() {
         let k = |code, m| KeyEvent::new(code, m);
-        assert_eq!(key_bytes(&k(KeyCode::Char('c'), KeyModifiers::CONTROL), false, b"\r"), Some(vec![3]));
-        assert_eq!(key_bytes(&k(KeyCode::Char('z'), KeyModifiers::CONTROL), false, b"\r"), Some(vec![26]));
-        assert_eq!(key_bytes(&k(KeyCode::Up, KeyModifiers::NONE), false, b"\r"), Some(b"\x1b[A".to_vec()));
-        assert_eq!(key_bytes(&k(KeyCode::Up, KeyModifiers::NONE), true, b"\r"), Some(b"\x1bOA".to_vec()));
-        assert_eq!(key_bytes(&k(KeyCode::Enter, KeyModifiers::NONE), false, b""), Some(b"\r".to_vec()));
-        assert_eq!(key_bytes(&k(KeyCode::Char('?'), KeyModifiers::NONE), false, b"\r"), Some(b"?".to_vec()));
+        assert_eq!(
+            key_bytes(&k(KeyCode::Char('c'), KeyModifiers::CONTROL), false, b"\r"),
+            Some(vec![3])
+        );
+        assert_eq!(
+            key_bytes(&k(KeyCode::Char('z'), KeyModifiers::CONTROL), false, b"\r"),
+            Some(vec![26])
+        );
+        assert_eq!(
+            key_bytes(&k(KeyCode::Up, KeyModifiers::NONE), false, b"\r"),
+            Some(b"\x1b[A".to_vec())
+        );
+        assert_eq!(
+            key_bytes(&k(KeyCode::Up, KeyModifiers::NONE), true, b"\r"),
+            Some(b"\x1bOA".to_vec())
+        );
+        assert_eq!(
+            key_bytes(&k(KeyCode::Enter, KeyModifiers::NONE), false, b""),
+            Some(b"\r".to_vec())
+        );
+        assert_eq!(
+            key_bytes(&k(KeyCode::Char('?'), KeyModifiers::NONE), false, b"\r"),
+            Some(b"?".to_vec())
+        );
         // AltGr+q on a German layout
         assert_eq!(
-            key_bytes(&k(KeyCode::Char('@'), KeyModifiers::CONTROL | KeyModifiers::ALT), false, b"\r"),
+            key_bytes(
+                &k(
+                    KeyCode::Char('@'),
+                    KeyModifiers::CONTROL | KeyModifiers::ALT
+                ),
+                false,
+                b"\r"
+            ),
             Some(b"@".to_vec())
         );
     }

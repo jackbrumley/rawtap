@@ -32,8 +32,14 @@ pub enum LinkSettings {
         stop_bits: StopBits,
         flow: FlowControl,
     },
-    TcpClient { host: String, port: u16 },
-    TcpListen { bind: String, port: u16 },
+    TcpClient {
+        host: String,
+        port: u16,
+    },
+    TcpListen {
+        bind: String,
+        port: u16,
+    },
 }
 
 impl LinkSettings {
@@ -47,7 +53,14 @@ impl LinkSettings {
 
     pub fn describe(&self) -> String {
         match self {
-            LinkSettings::Serial { port, baud, data_bits, parity, stop_bits, flow } => {
+            LinkSettings::Serial {
+                port,
+                baud,
+                data_bits,
+                parity,
+                stop_bits,
+                flow,
+            } => {
                 let d = match data_bits {
                     DataBits::Five => '5',
                     DataBits::Six => '6',
@@ -115,7 +128,14 @@ impl Link {
         let writer: SharedWriter = Arc::new(Mutex::new(None));
         let err_tx = tx.clone();
         let handle = match settings {
-            LinkSettings::Serial { port, baud, data_bits, parity, stop_bits, flow } => {
+            LinkSettings::Serial {
+                port,
+                baud,
+                data_bits,
+                parity,
+                stop_bits,
+                flow,
+            } => {
                 let mut sp = serialport::new(port, *baud)
                     .data_bits(*data_bits)
                     .parity(*parity)
@@ -129,7 +149,9 @@ impl Link {
                 if *flow != FlowControl::Hardware {
                     let _ = sp.write_request_to_send(true);
                 }
-                let mut reader = sp.try_clone().map_err(|e| format!("Could not clone {port}: {e}"))?;
+                let mut reader = sp
+                    .try_clone()
+                    .map_err(|e| format!("Could not clone {port}: {e}"))?;
                 *writer.lock().unwrap() = Some(Writer::Serial(sp));
                 let stop2 = stop.clone();
                 thread::spawn(move || {
@@ -144,7 +166,8 @@ impl Link {
                             }
                             Err(e) if is_transient(&e) => {}
                             Err(e) => {
-                                let _ = tx.send(LinkEvent::Closed(format!("Serial port error: {e}")));
+                                let _ =
+                                    tx.send(LinkEvent::Closed(format!("Serial port error: {e}")));
                                 break;
                             }
                         }
@@ -163,7 +186,8 @@ impl Link {
                     while !stop2.load(Ordering::Relaxed) {
                         match reader.read(&mut buf) {
                             Ok(0) => {
-                                let _ = tx.send(LinkEvent::Closed("Connection closed by peer.".into()));
+                                let _ =
+                                    tx.send(LinkEvent::Closed("Connection closed by peer.".into()));
                                 break;
                             }
                             Ok(n) => {
@@ -215,7 +239,9 @@ impl Link {
             return Err("no client connected yet".into());
         }
         match &self.out {
-            Some(out) => out.send(data.to_vec()).map_err(|_| "connection is closing".to_string()),
+            Some(out) => out
+                .send(data.to_vec())
+                .map_err(|_| "connection is closing".to_string()),
             None => Err("connection is closing".into()),
         }
     }
@@ -256,7 +282,12 @@ impl Drop for Link {
 }
 
 /// Write one queued message, either all at once or one byte at a time with a delay.
-fn write_paced(writer: &SharedWriter, data: &[u8], pace: &AtomicU64, stop: &AtomicBool) -> Result<(), String> {
+fn write_paced(
+    writer: &SharedWriter,
+    data: &[u8],
+    pace: &AtomicU64,
+    stop: &AtomicBool,
+) -> Result<(), String> {
     let ms = pace.load(Ordering::Relaxed);
     if ms == 0 {
         let mut g = writer.lock().unwrap();
@@ -297,7 +328,12 @@ fn write_all(w: &mut Writer, data: &[u8]) -> Result<(), String> {
     w.flush().map_err(|e| e.to_string())
 }
 
-fn listen_loop(listener: TcpListener, writer: SharedWriter, stop: Arc<AtomicBool>, tx: Sender<LinkEvent>) {
+fn listen_loop(
+    listener: TcpListener,
+    writer: SharedWriter,
+    stop: Arc<AtomicBool>,
+    tx: Sender<LinkEvent>,
+) {
     let mut client: Option<TcpStream> = None;
     let mut buf = [0u8; 4096];
     while !stop.load(Ordering::Relaxed) {
@@ -306,7 +342,9 @@ fn listen_loop(listener: TcpListener, writer: SharedWriter, stop: Arc<AtomicBool
                 Ok(0) => {
                     client = None;
                     *writer.lock().unwrap() = None;
-                    let _ = tx.send(LinkEvent::PeerDisconnected("Client disconnected. Waiting for the next one…".into()));
+                    let _ = tx.send(LinkEvent::PeerDisconnected(
+                        "Client disconnected. Waiting for the next one…".into(),
+                    ));
                 }
                 Ok(n) => {
                     if tx.send(LinkEvent::Data(buf[..n].to_vec())).is_err() {
@@ -317,7 +355,9 @@ fn listen_loop(listener: TcpListener, writer: SharedWriter, stop: Arc<AtomicBool
                 Err(e) => {
                     client = None;
                     *writer.lock().unwrap() = None;
-                    let _ = tx.send(LinkEvent::PeerDisconnected(format!("Client connection lost ({e}). Waiting for the next one…")));
+                    let _ = tx.send(LinkEvent::PeerDisconnected(format!(
+                        "Client connection lost ({e}). Waiting for the next one…"
+                    )));
                 }
             }
         } else {
@@ -332,7 +372,9 @@ fn listen_loop(listener: TcpListener, writer: SharedWriter, stop: Arc<AtomicBool
                     client = Some(s);
                     let _ = tx.send(LinkEvent::PeerConnected(addr.to_string()));
                 }
-                Err(e) if e.kind() == ErrorKind::WouldBlock => thread::sleep(Duration::from_millis(50)),
+                Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(50))
+                }
                 Err(e) if is_transient(&e) => {}
                 Err(e) => {
                     let _ = tx.send(LinkEvent::Closed(format!("Listener failed: {e}")));
@@ -344,7 +386,10 @@ fn listen_loop(listener: TcpListener, writer: SharedWriter, stop: Arc<AtomicBool
 }
 
 fn is_transient(e: &std::io::Error) -> bool {
-    matches!(e.kind(), ErrorKind::TimedOut | ErrorKind::WouldBlock | ErrorKind::Interrupted)
+    matches!(
+        e.kind(),
+        ErrorKind::TimedOut | ErrorKind::WouldBlock | ErrorKind::Interrupted
+    )
 }
 
 fn connect_tcp(host: &str, port: u16) -> Result<TcpStream, String> {
@@ -363,8 +408,12 @@ fn connect_tcp(host: &str, port: u16) -> Result<TcpStream, String> {
         return Err(format!("'{host}' resolved to no addresses"));
     };
     let hint = match e.kind() {
-        ErrorKind::ConnectionRefused => "\nNothing is listening on that port, or a firewall is rejecting it.",
-        ErrorKind::TimedOut => "\nNo answer within 5 s. Check the IP address, network and firewall.",
+        ErrorKind::ConnectionRefused => {
+            "\nNothing is listening on that port, or a firewall is rejecting it."
+        }
+        ErrorKind::TimedOut => {
+            "\nNo answer within 5 s. Check the IP address, network and firewall."
+        }
         _ => "",
     };
     Err(format!("Failed to connect to {host}:{port}: {e}{hint}"))
@@ -375,7 +424,10 @@ fn serial_error(port: &str, e: &serialport::Error) -> String {
     let lower = msg.to_lowercase();
     let hint = if lower.contains("access is denied") || lower.contains("permission") {
         "\nThe port is probably open in another program (PuTTY, another RawTap, a vendor tool)."
-    } else if lower.contains("cannot find") || lower.contains("not found") || matches!(e.kind, serialport::ErrorKind::NoDevice) {
+    } else if lower.contains("cannot find")
+        || lower.contains("not found")
+        || matches!(e.kind, serialport::ErrorKind::NoDevice)
+    {
         "\nThat port doesn't exist right now. Check the cable / USB adapter, or pick one from the detected list."
     } else {
         ""
@@ -386,8 +438,12 @@ fn serial_error(port: &str, e: &serialport::Error) -> String {
 fn listen_error(bind: &str, port: u16, e: &std::io::Error) -> String {
     let hint = match e.kind() {
         ErrorKind::AddrInUse => "\nSomething else is already listening on that port.",
-        ErrorKind::AddrNotAvailable => "\nThat bind address isn't on this PC. Use 0.0.0.0 for all interfaces.",
-        ErrorKind::PermissionDenied => "\nWindows refused the port (reserved range or policy). Try another port.",
+        ErrorKind::AddrNotAvailable => {
+            "\nThat bind address isn't on this PC. Use 0.0.0.0 for all interfaces."
+        }
+        ErrorKind::PermissionDenied => {
+            "\nWindows refused the port (reserved range or policy). Try another port."
+        }
         _ => "",
     };
     format!("Failed to listen on {bind}:{port}: {e}{hint}")
@@ -401,7 +457,9 @@ mod tests {
     fn wait_for<F: Fn(&LinkEvent) -> bool>(rx: &mpsc::Receiver<LinkEvent>, f: F) -> LinkEvent {
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
-            let ev = rx.recv_timeout(deadline - Instant::now()).expect("timed out waiting for event");
+            let ev = rx
+                .recv_timeout(deadline - Instant::now())
+                .expect("timed out waiting for event");
             if f(&ev) {
                 return ev;
             }
@@ -411,19 +469,41 @@ mod tests {
     #[test]
     fn tcp_client_and_server_talk() {
         // Pick a free port.
-        let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
         let (stx, srx) = mpsc::channel();
-        let server = Link::open(&LinkSettings::TcpListen { bind: "127.0.0.1".into(), port }, stx).unwrap();
+        let server = Link::open(
+            &LinkSettings::TcpListen {
+                bind: "127.0.0.1".into(),
+                port,
+            },
+            stx,
+        )
+        .unwrap();
         let (ctx, crx) = mpsc::channel();
-        let client = Link::open(&LinkSettings::TcpClient { host: "127.0.0.1".into(), port }, ctx).unwrap();
+        let client = Link::open(
+            &LinkSettings::TcpClient {
+                host: "127.0.0.1".into(),
+                port,
+            },
+            ctx,
+        )
+        .unwrap();
 
         wait_for(&srx, |e| matches!(e, LinkEvent::PeerConnected(_)));
         client.send(b"\x02PING\x03").unwrap();
-        let LinkEvent::Data(d) = wait_for(&srx, |e| matches!(e, LinkEvent::Data(_))) else { unreachable!() };
+        let LinkEvent::Data(d) = wait_for(&srx, |e| matches!(e, LinkEvent::Data(_))) else {
+            unreachable!()
+        };
         assert_eq!(d, b"\x02PING\x03");
 
         server.send(b"PONG\r\n").unwrap();
-        let LinkEvent::Data(d) = wait_for(&crx, |e| matches!(e, LinkEvent::Data(_))) else { unreachable!() };
+        let LinkEvent::Data(d) = wait_for(&crx, |e| matches!(e, LinkEvent::Data(_))) else {
+            unreachable!()
+        };
         assert_eq!(d, b"PONG\r\n");
 
         // Paced send: same bytes, arriving spread out over time.
@@ -437,7 +517,10 @@ mod tests {
             }
         }
         assert_eq!(got, b"admin\r");
-        assert!(t0.elapsed() >= Duration::from_millis(90), "pacing not applied");
+        assert!(
+            t0.elapsed() >= Duration::from_millis(90),
+            "pacing not applied"
+        );
 
         drop(server);
         wait_for(&crx, |e| matches!(e, LinkEvent::Closed(_)));

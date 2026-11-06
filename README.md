@@ -153,8 +153,10 @@ Same settings as the Python version (`image_extraction` in the config), plus:
 | `src/macros.rs` | macro keys and the step runner |
 | `src/menu.rs` | the F1 menu: items, descriptions, search |
 | `src/clip.rs` | clipboard (in-memory during tests) |
-| `src/monitor.rs` | monitor state: raw log grouping, sending, live keys, hidden send, key handling |
-| `src/ui_monitor.rs` | drawing the monitor (layouts, panes, send box) |
+| `src/monitor.rs` | monitor state: raw log grouping, sending, live keys, hidden send, macros |
+| `src/monitor/view.rs`, `src/monitor/keys.rs` | panes, mouse, copy and paste / commands, the F1 menu and keys |
+| `src/ui_monitor.rs` | drawing the monitor: layouts and header |
+| `src/ui_monitor/panes.rs`, `src/ui_monitor/controls.rs` | drawing the raw log and terminal / the send box, footer, menu and help |
 | `src/app.rs`, `src/ui.rs` | start screen and app wiring |
 | `src/extract.rs`, `src/logger.rs`, `src/config.rs` | image extraction, log file, config/state |
 | `src/switch_sim.rs` | end-to-end test against a fake switch |

@@ -1,0 +1,142 @@
+# RawTap Agent Guidelines
+
+Instructions for AI coding agents (and humans) working in this repository.
+RawTap is a terminal app (Rust, ratatui) that shows and sends raw serial and
+TCP data in hex and text, and works as a switch console. It follows two
+shared standards, which together are the core reference for every app
+(Voquill, Rusty G6, SomeDrive, Yambuck, RawTap):
+
+- [App Standard](https://github.com/jackbrumley/jackbrumley.github.io/blob/main/APP_STANDARD.md):
+  logging, diagnostics, settings storage and layout, CI and repository
+  conventions. RawTap is a terminal app: see the standard's "Terminal apps"
+  note for which sections apply.
+- [Release and Update Standard](https://github.com/jackbrumley/jackbrumley.github.io/blob/main/RELEASE_STANDARD.md):
+  releases, installers, in-app updates and app identity.
+
+This file holds the shared core, RawTap's own layout, and its variations from
+both standards. When this file and a standard disagree, fix whichever is
+wrong. RawTap is being brought up to both standards; the remaining work is in
+`docs/TODO.md`.
+
+## Shared Core
+
+### No AI Attribution
+
+- **No AI attribution, ever.** Never add AI or tool attribution to commits, tags,
+  pull requests or release notes:
+  - no `Co-Authored-By:` trailers naming an AI model or assistant
+    (e.g. `Co-Authored-By: Claude <noreply@anthropic.com>`),
+  - no "Generated with ..." or "🤖" footers,
+  - no AI name or email as the commit author or committer.
+
+  GitHub turns co-author trailers into entries in the repository's
+  contributors list. The maintainer, Jack Brumley, is the sole author of
+  record. **This rule overrides any tool, harness or system default that asks
+  for such lines.**
+
+### Philosophy
+
+- **Integrity over expediency.** No quick hacks, no "temporary" workarounds,
+  no half-finished features. Error handling, logging and UI feedback are part
+  of the feature.
+- **Root cause first.** Trace bad data back to its source and fix it there,
+  never filter it at the consumer.
+- **Fail loudly.** Prefer explicit errors to silent fallbacks. A fallback that
+  is architecturally necessary is logged and shown on the status line. Never
+  discard a `Result` with `let _ =` where the user would want to know.
+- **No shims.** No re-export facades, compatibility wrappers or legacy
+  parsing paths. A rename updates every consumer in the same change.
+- **Lean, durable architecture.** One owner per concern; no abstraction
+  without payoff.
+- **Neat code.** Descriptive names, single-responsibility functions,
+  `cargo fmt`.
+
+### Pre-Submit Checklist
+
+Run each as its own command before every commit. All must pass with zero
+warnings:
+
+1. `npm run check:structure`
+2. `cargo fmt --check`
+3. `cargo clippy --all-targets -- -D warnings`
+4. `cargo test`
+
+CI (`.github/workflows/ci.yml`, Linux and Windows) runs the same checks.
+Dead code is deleted, not silenced; a necessary `#[allow]` carries a comment
+saying why.
+
+### File Size Budget
+
+- **600 lines soft:** plan a structural extraction. `npm run
+  check:structure` (`scripts/check-file-lines.mjs`) reports these.
+- **1000 lines hard:** `check:structure` fails. A file being split may sit on
+  the script's commented allowlist.
+- Split by responsibility (one concern per file, named for it), never into
+  numeric shards and never by compressing code to hit a count.
+
+### Common Pitfalls
+
+- **Blocking the UI:** serial and TCP I/O run on the link's reader thread
+  (`src/link.rs`); the draw loop never blocks.
+- **Raw terminal mode:** anything that can exit or panic must leave the
+  terminal restored.
+- **Passwords:** hidden sends and anything typed at a `Password:` prompt are
+  never logged, kept in history or written to a capture.
+- **Platforms:** RawTap ships for Linux and Windows. Port names, file
+  openers and error messages must work on both (`/dev/ttyUSB0` and `COM3`).
+- **Silent failures:** log every error and, when relevant, show it on the
+  status line.
+- **Documentation:** never document commands or files that don't exist.
+
+### Working in This Repo
+
+- Use Conventional Commit messages (`feat:`, `fix:`, `docs:`, `chore:` ...).
+- Commit or push only when asked. Work on `dev`; `main` only moves by
+  release promotion, or by a site-only update (Release Standard §3).
+- Plans and known bugs live in `docs/TODO.md` (Now / Next / Ideas).
+- Changes you didn't make (the maintainer or another agent) are intentional
+  unless you're told otherwise; never roll them back.
+
+## Project Layout
+
+- `src/main.rs`: command line (clap) and start-up.
+- `src/app.rs`, `src/ui.rs`: the start screen and app wiring.
+- `src/monitor.rs`: the monitor's state (raw log, terminal, send box,
+  macros); `src/monitor/view.rs` (panes, mouse, copy and paste) and
+  `src/monitor/keys.rs` (commands, the F1 menu, keys).
+- `src/ui_monitor.rs`: drawing the monitor; `src/ui_monitor/panes.rs` (raw
+  log and terminal) and `src/ui_monitor/controls.rs` (send box, footer, menu,
+  help).
+- `src/link.rs`: serial, TCP client and TCP server, each with a reader thread.
+- `src/term.rs`: terminal emulation (vt100), live keys, transcript.
+- `src/codec.rs`, `src/macros.rs`, `src/menu.rs`, `src/clip.rs`,
+  `src/extract.rs`, `src/logger.rs`, `src/config.rs`: hex/text codec,
+  macros, menu items, clipboard, image extraction, the traffic log, config.
+- `src/switch_sim.rs`: end-to-end test against a fake Cisco-style switch.
+- `scripts/check-file-lines.mjs`: the file size check.
+- `.github/workflows/ci.yml`: the pre-submit checks on every push and pull
+  request, on Linux and Windows.
+- `docs/TODO.md`: known bugs and planned work (Now / Next / Ideas).
+
+## Variations
+
+### From the App Standard
+
+- **Terminal app:** no window, so no title bar, corner resize handles, Linux
+  start-up environment (no GTK or WebKit), modals or toasts. Messages go to
+  the status line.
+- **Checks:** no frontend, so no `typecheck`, `lint` or frontend build. The
+  root `package.json` holds only repository scripts and has no version.
+- **Settings layout:** the F1 menu is the settings screen, in the standard
+  order: General, Updates, RawTap's own sections, Debug.
+
+### From the Release and Update Standard
+
+- **Identity:** app ID `info.brumley.rawtap`, binary `rawtap`, environment
+  prefix `RAWTAP`, install site `https://brumley.info/rawtap` (GitHub Pages
+  from `main:/docs`). Platforms: Linux x64 and Windows x64.
+- **Version file:** only `Cargo.toml` (no `package.json` or
+  `tauri.conf.json` version).
+- **Packaging:** not a Tauri app, so the standard five assets are built with
+  Rust packaging tools instead of Tauri's bundler.
+- **In-app update:** the standard's "Terminal apps" flow.

@@ -2,7 +2,7 @@
 name = "rawtap"
 version = "0.6.0"
 edition = "2024"
-rust-version = "1.85"
+license = "AGPL-3.0-only"
 description = "See and send raw serial and TCP data, in hex and text. A console when you need one."
 repository = "https://github.com/jackbrumley/rawtap"
 

@@ -11,7 +11,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
 pub const BAUDS: &[&str] = &[
-    "300", "1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600",
+    "300", "1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200", "230400", "460800",
+    "921600",
 ];
 pub const DATA_BITS: &[&str] = &["5", "6", "7", "8"];
 pub const PARITIES: &[&str] = &["None", "Odd", "Even"];
@@ -67,17 +68,39 @@ impl Field {
     /// Shown under the form for the highlighted field.
     pub fn description(self) -> &'static str {
         match self {
-            Field::Mode => "Serial: a COM port (USB adapter or console cable). TCP client: connect out to an IP and port. TCP server: wait for a device to connect to this PC.",
-            Field::SerialPort => "The serial port to open. ←→ cycles through the ports detected on this PC, or type a name such as COM3.",
-            Field::Baud => "Speed of the serial line; it must match the device. Switch consoles are usually 9600 or 115200. ←→ for common speeds, or type one.",
-            Field::DataBits | Field::Parity | Field::StopBits => "Almost always 8 data bits, no parity, 1 stop bit (\"8N1\"). Only change these if the device's manual says so.",
-            Field::Flow => "Usually None. Hardware uses the RTS/CTS wires; Software uses XON/XOFF characters.",
-            Field::Host => "Host name or IP address of the device or terminal server. Note: raw TCP, not telnet.",
-            Field::TcpPort => "Port number on that host, e.g. a terminal server's raw TCP port for the device.",
-            Field::Bind => "Which address on this PC to listen on. 0.0.0.0 means all network adapters.",
-            Field::ListenPort => "Port devices will connect to on this PC. Windows Firewall may need to allow it.",
-            Field::Logging => "Write a hex log and a plain-text transcript of the session to the logs folder.",
-            Field::Options => "Settings remembered for this port or host. ←→ or Enter to show / hide them. They can also be changed any time from the F1 menu.",
+            Field::Mode => {
+                "Serial: a COM port (USB adapter or console cable). TCP client: connect out to an IP and port. TCP server: wait for a device to connect to this PC."
+            }
+            Field::SerialPort => {
+                "The serial port to open. ←→ cycles through the ports detected on this PC, or type a name such as COM3."
+            }
+            Field::Baud => {
+                "Speed of the serial line; it must match the device. Switch consoles are usually 9600 or 115200. ←→ for common speeds, or type one."
+            }
+            Field::DataBits | Field::Parity | Field::StopBits => {
+                "Almost always 8 data bits, no parity, 1 stop bit (\"8N1\"). Only change these if the device's manual says so."
+            }
+            Field::Flow => {
+                "Usually None. Hardware uses the RTS/CTS wires; Software uses XON/XOFF characters."
+            }
+            Field::Host => {
+                "Host name or IP address of the device or terminal server. Note: raw TCP, not telnet."
+            }
+            Field::TcpPort => {
+                "Port number on that host, e.g. a terminal server's raw TCP port for the device."
+            }
+            Field::Bind => {
+                "Which address on this PC to listen on. 0.0.0.0 means all network adapters."
+            }
+            Field::ListenPort => {
+                "Port devices will connect to on this PC. Windows Firewall may need to allow it."
+            }
+            Field::Logging => {
+                "Write a hex log and a plain-text transcript of the session to the logs folder."
+            }
+            Field::Options => {
+                "Settings remembered for this port or host. ←→ or Enter to show / hide them. They can also be changed any time from the F1 menu."
+            }
             Field::OptLineEnding => crate::menu::line_ending_desc(),
             Field::OptCharDelay => crate::menu::char_delay_desc(),
             Field::OptSendMode => crate::menu::send_mode_desc(),
@@ -86,7 +109,15 @@ impl Field {
     }
     /// Text fields accept typing; the rest are cycled with ←/→.
     pub fn is_text(self) -> bool {
-        matches!(self, Field::SerialPort | Field::Baud | Field::Host | Field::TcpPort | Field::Bind | Field::ListenPort)
+        matches!(
+            self,
+            Field::SerialPort
+                | Field::Baud
+                | Field::Host
+                | Field::TcpPort
+                | Field::Bind
+                | Field::ListenPort
+        )
     }
 }
 
@@ -122,7 +153,12 @@ impl Setup {
         f.push(Field::Logging);
         f.push(Field::Options);
         if options_open {
-            f.extend([Field::OptLineEnding, Field::OptCharDelay, Field::OptSendMode, Field::OptLayout]);
+            f.extend([
+                Field::OptLineEnding,
+                Field::OptCharDelay,
+                Field::OptSendMode,
+                Field::OptLayout,
+            ]);
         }
         f
     }
@@ -135,17 +171,27 @@ pub fn scan_ports() -> Vec<PortInfo> {
         .map(|p| {
             let desc = match p.port_type {
                 serialport::SerialPortType::UsbPort(u) => {
-                    let name = u.product.or(u.manufacturer).unwrap_or_else(|| "USB serial".into());
+                    let name = u
+                        .product
+                        .or(u.manufacturer)
+                        .unwrap_or_else(|| "USB serial".into());
                     format!("{name} (USB {:04X}:{:04X})", u.vid, u.pid)
                 }
                 serialport::SerialPortType::BluetoothPort => "Bluetooth".into(),
                 serialport::SerialPortType::PciPort => "Built-in / PCI".into(),
                 serialport::SerialPortType::Unknown => String::new(),
             };
-            PortInfo { name: p.port_name, desc }
+            PortInfo {
+                name: p.port_name,
+                desc,
+            }
         })
         .collect();
-    let num = |n: &str| n.trim_start_matches(|c: char| !c.is_ascii_digit()).parse::<u32>().unwrap_or(u32::MAX);
+    let num = |n: &str| {
+        n.trim_start_matches(|c: char| !c.is_ascii_digit())
+            .parse::<u32>()
+            .unwrap_or(u32::MAX)
+    };
     ports.sort_by(|a, b| num(&a.name).cmp(&num(&b.name)).then(a.name.cmp(&b.name)));
     ports
 }
@@ -155,14 +201,25 @@ fn cycle_in(list: &[&str], current: &str, dir: i32) -> String {
     let n = list.len() as i32;
     let next = match i {
         Some(i) => (i as i32 + dir).rem_euclid(n),
-        None => if dir > 0 { 0 } else { n - 1 },
+        None => {
+            if dir > 0 {
+                0
+            } else {
+                n - 1
+            }
+        }
     };
     list[next as usize].to_string()
 }
 
 /// The profile key for what's currently typed in the start screen (matches `profile_key`).
 pub fn form_profile_key(s: &Saved) -> String {
-    let port = |p: &str| p.trim().parse::<u16>().map(|n| n.to_string()).unwrap_or_else(|_| p.trim().to_string());
+    let port = |p: &str| {
+        p.trim()
+            .parse::<u16>()
+            .map(|n| n.to_string())
+            .unwrap_or_else(|_| p.trim().to_string())
+    };
     match s.mode {
         ConnMode::Serial => format!("serial:{}", s.serial_port.trim().to_uppercase()),
         ConnMode::Tcp => format!("tcp:{}:{}", s.tcp_host.trim(), port(&s.tcp_port)),
@@ -207,27 +264,44 @@ pub fn settings_from_saved(s: &Saved) -> Result<LinkSettings, String> {
                 "even" | "e" => Parity::Even,
                 _ => Parity::None,
             };
-            let stop_bits = if s.stop_bits == "2" { StopBits::Two } else { StopBits::One };
+            let stop_bits = if s.stop_bits == "2" {
+                StopBits::Two
+            } else {
+                StopBits::One
+            };
             let flow = match s.flow.to_ascii_lowercase().as_str() {
                 "software" | "xonxoff" => FlowControl::Software,
                 "hardware" | "rtscts" => FlowControl::Hardware,
                 _ => FlowControl::None,
             };
-            Ok(LinkSettings::Serial { port, baud, data_bits, parity, stop_bits, flow })
+            Ok(LinkSettings::Serial {
+                port,
+                baud,
+                data_bits,
+                parity,
+                stop_bits,
+                flow,
+            })
         }
         ConnMode::Tcp => {
             let host = s.tcp_host.trim().to_string();
             if host.is_empty() {
                 return Err("Enter a host name or IP address.".into());
             }
-            Ok(LinkSettings::TcpClient { host, port: port_num(&s.tcp_port, "TCP port")? })
+            Ok(LinkSettings::TcpClient {
+                host,
+                port: port_num(&s.tcp_port, "TCP port")?,
+            })
         }
         ConnMode::Listen => {
             let bind = match s.listen_bind.trim() {
                 "" => "0.0.0.0".to_string(),
                 b => b.to_string(),
             };
-            Ok(LinkSettings::TcpListen { bind, port: port_num(&s.listen_port, "TCP port")? })
+            Ok(LinkSettings::TcpListen {
+                bind,
+                port: port_num(&s.listen_port, "TCP port")?,
+            })
         }
     }
 }
@@ -259,11 +333,24 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(config: Config, paths: Paths, saved: Saved, notes: Vec<String>, no_log: bool) -> App {
+    pub fn new(
+        config: Config,
+        paths: Paths,
+        saved: Saved,
+        notes: Vec<String>,
+        no_log: bool,
+    ) -> App {
         let (tx, rx) = mpsc::channel();
         let mut app = App {
             screen: Screen::Setup,
-            setup: Setup { focus: 0, ports: Vec::new(), error: None, connecting: false, options_open: false, last_scan: None },
+            setup: Setup {
+                focus: 0,
+                ports: Vec::new(),
+                error: None,
+                connecting: false,
+                options_open: false,
+                last_scan: None,
+            },
             monitor: None,
             config,
             paths,
@@ -316,7 +403,9 @@ impl App {
         }
         let is_release = |e: &Event| matches!(e, Event::Key(k) if k.kind == KeyEventKind::Release);
         let n = batch.iter().filter(|e| typed(e).is_some()).count();
-        let continuing = self.paste_buf.is_some() && n > 0 && batch.iter().all(|e| typed(e).is_some() || is_release(e));
+        let continuing = self.paste_buf.is_some()
+            && n > 0
+            && batch.iter().all(|e| typed(e).is_some() || is_release(e));
         if n >= 4 || continuing {
             let buf = self.paste_buf.get_or_insert_with(String::new);
             let mut others = Vec::new();
@@ -369,7 +458,10 @@ impl App {
             self.connect_from_setup();
         }
         if self.screen == Screen::Setup
-            && self.setup.last_scan.is_none_or(|t| t.elapsed() > Duration::from_secs(2))
+            && self
+                .setup
+                .last_scan
+                .is_none_or(|t| t.elapsed() > Duration::from_secs(2))
         {
             self.rescan_ports();
         }
@@ -387,10 +479,18 @@ impl App {
         if self.no_log || !self.saved.logging {
             return (None, None);
         }
-        let dir = self.paths.resolve(self.config.log_directory.as_deref().unwrap_or("logs"));
+        let dir = self
+            .paths
+            .resolve(self.config.log_directory.as_deref().unwrap_or("logs"));
         match Logger::create(&dir, settings.kind(), &settings.describe()) {
             Ok(l) => (Some(l), None),
-            Err(e) => (None, Some(format!("Could not create log file in {}: {e}", dir.display()))),
+            Err(e) => (
+                None,
+                Some(format!(
+                    "Could not create log file in {}: {e}",
+                    dir.display()
+                )),
+            ),
         }
     }
 
@@ -414,14 +514,31 @@ impl App {
             }
         };
         let (logger, log_note) = self.make_logger(&settings);
-        let (extractor, extract_note) = Extractor::new(self.config.image_extraction.as_ref(), &self.paths);
+        let (extractor, extract_note) =
+            Extractor::new(self.config.image_extraction.as_ref(), &self.paths);
         let key = profile_key(&settings);
         let profile = self.saved.profiles.get(&key).cloned().unwrap_or_default();
         let (macros, macro_notes) = crate::macros::load(&self.config.macros);
-        let capture_dir = self.paths.resolve(self.config.capture_directory.as_deref().unwrap_or("captures"));
-        let mut m = Monitor::new(settings.clone(), key, profile, self.saved.history.clone(), macros, extractor, capture_dir);
+        let capture_dir = self.paths.resolve(
+            self.config
+                .capture_directory
+                .as_deref()
+                .unwrap_or("captures"),
+        );
+        let mut m = Monitor::new(
+            settings.clone(),
+            key,
+            profile,
+            self.saved.history.clone(),
+            macros,
+            extractor,
+            capture_dir,
+        );
         if !self.no_log {
-            m.log_dir = Some(self.paths.resolve(self.config.log_directory.as_deref().unwrap_or("logs")));
+            m.log_dir = Some(
+                self.paths
+                    .resolve(self.config.log_directory.as_deref().unwrap_or("logs")),
+            );
         }
         for n in self.notes.drain(..) {
             m.push(EntryKind::Info(n));
@@ -431,7 +548,9 @@ impl App {
         for n in macro_notes {
             m.push(EntryKind::Error(n));
         }
-        m.push(EntryKind::Info("F1 opens the menu: settings, macros, hidden send, live keys and more.".into()));
+        m.push(EntryKind::Info(
+            "F1 opens the menu: settings, macros, hidden send, live keys and more.".into(),
+        ));
         self.monitor = Some(m);
         self.screen = Screen::Monitor;
         self.setup.error = None;
@@ -440,7 +559,9 @@ impl App {
     }
 
     fn reconnect(&mut self) {
-        let Some(m) = self.monitor.as_mut() else { return };
+        let Some(m) = self.monitor.as_mut() else {
+            return;
+        };
         m.detach("Disconnected. Reconnecting…");
         while self.rx.try_recv().is_ok() {}
         let settings = m.settings.clone();
@@ -462,7 +583,9 @@ impl App {
     fn close_monitor(&mut self) {
         if let Some(mut m) = self.monitor.take() {
             self.saved.history = m.history.clone();
-            self.saved.profiles.insert(m.profile_key.clone(), m.profile.clone());
+            self.saved
+                .profiles
+                .insert(m.profile_key.clone(), m.profile.clone());
             m.detach("Session closed.");
         }
         while self.rx.try_recv().is_ok() {}
@@ -471,7 +594,9 @@ impl App {
     pub fn store_state(&mut self) {
         if let Some(m) = &self.monitor {
             self.saved.history = m.history.clone();
-            self.saved.profiles.insert(m.profile_key.clone(), m.profile.clone());
+            self.saved
+                .profiles
+                .insert(m.profile_key.clone(), m.profile.clone());
         }
         config::store_saved(&self.paths, &self.saved);
     }
@@ -501,7 +626,9 @@ impl App {
         match self.screen {
             Screen::Setup => self.setup_key(k),
             Screen::Monitor => {
-                let Some(m) = self.monitor.as_mut() else { return };
+                let Some(m) = self.monitor.as_mut() else {
+                    return;
+                };
                 match m.on_key(k) {
                     Action::None => {}
                     Action::Quit => self.quit = true,
@@ -586,10 +713,22 @@ impl App {
                 let key = form_profile_key(s);
                 let p = s.profiles.entry(key).or_default();
                 match f {
-                    Field::OptLineEnding => p.line_ending = crate::menu::step(&[L::None, L::Cr, L::Lf, L::Crlf], p.line_ending, dir),
-                    Field::OptCharDelay => p.char_delay_ms = crate::menu::step(&crate::menu::CHAR_DELAYS, p.char_delay_ms, dir),
-                    Field::OptSendMode => p.input_mode = crate::menu::step(&crate::menu::input_modes(), p.input_mode, dir),
-                    _ => p.layout = crate::menu::step(&[Ly::Split, Ly::Log, Ly::Terminal], p.layout, dir),
+                    Field::OptLineEnding => {
+                        p.line_ending =
+                            crate::menu::step(&[L::None, L::Cr, L::Lf, L::Crlf], p.line_ending, dir)
+                    }
+                    Field::OptCharDelay => {
+                        p.char_delay_ms =
+                            crate::menu::step(&crate::menu::CHAR_DELAYS, p.char_delay_ms, dir)
+                    }
+                    Field::OptSendMode => {
+                        p.input_mode =
+                            crate::menu::step(&crate::menu::input_modes(), p.input_mode, dir)
+                    }
+                    _ => {
+                        p.layout =
+                            crate::menu::step(&[Ly::Split, Ly::Log, Ly::Terminal], p.layout, dir)
+                    }
                 }
             }
             Field::Host | Field::TcpPort | Field::Bind | Field::ListenPort => {}
@@ -598,7 +737,11 @@ impl App {
 
     /// The remembered profile for what's typed in the form (defaults if none yet).
     pub fn form_profile(&self) -> crate::config::Profile {
-        self.saved.profiles.get(&form_profile_key(&self.saved)).cloned().unwrap_or_default()
+        self.saved
+            .profiles
+            .get(&form_profile_key(&self.saved))
+            .cloned()
+            .unwrap_or_default()
     }
 
     pub fn field_value(&self, f: Field) -> String {
@@ -615,12 +758,31 @@ impl App {
             Field::TcpPort => s.tcp_port.clone(),
             Field::Bind => s.listen_bind.clone(),
             Field::ListenPort => s.listen_port.clone(),
-            Field::Logging => if s.logging { "Yes".into() } else { "No".into() },
+            Field::Logging => {
+                if s.logging {
+                    "Yes".into()
+                } else {
+                    "No".into()
+                }
+            }
             Field::Options => {
                 let p = self.form_profile();
-                let delay = if p.char_delay_ms == 0 { "no delay".to_string() } else { format!("{} ms delay", p.char_delay_ms) };
-                let arrow = if self.setup.options_open { "▾" } else { "▸" };
-                format!("{arrow} {} · {delay} · {} · {}", p.line_ending.label(), p.input_mode.label(), p.layout.label())
+                let delay = if p.char_delay_ms == 0 {
+                    "no delay".to_string()
+                } else {
+                    format!("{} ms delay", p.char_delay_ms)
+                };
+                let arrow = if self.setup.options_open {
+                    "▾"
+                } else {
+                    "▸"
+                };
+                format!(
+                    "{arrow} {} · {delay} · {} · {}",
+                    p.line_ending.label(),
+                    p.input_mode.label(),
+                    p.layout.label()
+                )
             }
             Field::OptLineEnding => self.form_profile().line_ending.label().into(),
             Field::OptCharDelay => match self.form_profile().char_delay_ms {

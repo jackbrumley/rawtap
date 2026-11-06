@@ -78,7 +78,14 @@ pub fn layout_desc() -> &'static str {
     "Split shows the raw log and the live terminal together: side by side when the window is wide, stacked when it's narrow. Or show just one."
 }
 
-fn setting(section: &'static str, label: &str, value: String, key: &str, desc: &str, s: Setting) -> Item {
+fn setting(
+    section: &'static str,
+    label: &str,
+    value: String,
+    key: &str,
+    desc: &str,
+    s: Setting,
+) -> Item {
     Item {
         section,
         label: label.into(),
@@ -90,7 +97,14 @@ fn setting(section: &'static str, label: &str, value: String, key: &str, desc: &
 }
 
 fn cmd(section: &'static str, label: &str, key: &str, desc: String, c: Cmd) -> Item {
-    Item { section, label: label.into(), value: None, key: key.into(), desc, kind: Kind::Cmd(c) }
+    Item {
+        section,
+        label: label.into(),
+        value: None,
+        key: key.into(),
+        desc,
+        kind: Kind::Cmd(c),
+    }
 }
 
 /// All menu items for the current state.
@@ -127,13 +141,22 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         let d = &mac.def;
         let mut desc = match &d.data {
             Some(data) if d.steps.is_empty() => format!("Sends {:?} ({}).", data, d.mode.label()),
-            _ => format!("Runs a {}-step macro from rawtap_config.json.", d.steps.len() + d.data.is_some() as usize),
+            _ => format!(
+                "Runs a {}-step macro from rawtap_config.json.",
+                d.steps.len() + d.data.is_some() as usize
+            ),
         };
         if d.capture {
             desc.push_str(" Saves what the device prints to the captures folder.");
         }
         desc.push_str(" Esc cancels it while it runs.");
-        v.push(cmd("MACROS", &format!("Macro: {}", mac.label), &mac.key.label(), desc, Cmd::Macro(i)));
+        v.push(cmd(
+            "MACROS",
+            &format!("Macro: {}", mac.label),
+            &mac.key.label(),
+            desc,
+            Cmd::Macro(i),
+        ));
     }
 
     // Clipboard
@@ -194,7 +217,14 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         send_mode_desc(),
         Setting::InputMode,
     ));
-    v.push(setting(settings_section, "Layout", m.profile.layout.label().into(), "F3", layout_desc(), Setting::Layout));
+    v.push(setting(
+        settings_section,
+        "Layout",
+        m.profile.layout.label().into(),
+        "F3",
+        layout_desc(),
+        Setting::Layout,
+    ));
     v.push(setting(
         settings_section,
         "Raw log format",
@@ -244,7 +274,10 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         "SESSION",
         "Reconnect",
         "Ctrl+R",
-        format!("Closes and reopens {} with the same settings. Starts a new log file.", m.settings.describe()),
+        format!(
+            "Closes and reopens {} with the same settings. Starts a new log file.",
+            m.settings.describe()
+        ),
         Cmd::Reconnect,
     ));
     v.push(cmd(
@@ -265,7 +298,8 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         "SESSION",
         "Quit",
         "Ctrl+Q",
-        "Closes RawTap. Settings and history are saved. Ctrl+Shift+Q also quits from live keys.".into(),
+        "Closes RawTap. Settings and history are saved. Ctrl+Shift+Q also quits from live keys."
+            .into(),
         Cmd::Quit,
     ));
     v
