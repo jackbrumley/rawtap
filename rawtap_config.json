@@ -1,0 +1,48 @@
+{
+  "_readme": "RawTap config. Edit and restart RawTap. Keys starting with _ are ignored.",
+  "log_directory": "logs",
+  "capture_directory": "captures",
+  "macros": [
+    {
+      "key": "Alt+1",
+      "label": "Hello",
+      "mode": "ascii",
+      "data": "HELLO"
+    },
+    {
+      "key": "Alt+2",
+      "label": "STX A ETX",
+      "mode": "hex",
+      "data": "02 41 03"
+    },
+    {
+      "key": "Alt+9",
+      "label": "Switch: save running-config",
+      "capture": true,
+      "steps": [
+        {
+          "send": "terminal length 0",
+          "wait": "#"
+        },
+        {
+          "send": "show running-config",
+          "wait_idle_ms": 2000,
+          "timeout_ms": 120000
+        }
+      ]
+    }
+  ],
+  "_macros_help": "key: Alt+0..9, Shift+F1..F12, F11, F12 (F1-F10 are built in). mode: ascii|hex. line_ending: none|cr|lf|crlf, default = current (F2). Steps: delay_ms, send, send_hex, wait, wait_idle_ms, timeout_ms. capture: true saves the output to capture_directory. Don't put passwords in macros - use F6.",
+  "image_extraction": {
+    "enabled": true,
+    "header_magic": "AB CD 12 34 CA FE BA BE",
+    "header_length": 21,
+    "size_offset": 17,
+    "size_length": 4,
+    "size_endian": "little",
+    "output_directory": "logs/extracted_images",
+    "filename_prefix": "scan_image_",
+    "file_extension": "bmp",
+    "max_payload_bytes": 16777216
+  }
+}
