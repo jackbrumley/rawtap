@@ -147,18 +147,29 @@ fn draw_setup(f: &mut Frame, app: &App) {
     } else {
         0
     };
-    let notes_rows = app.notes.len()
-        + app
-            .setup
-            .error
-            .as_ref()
-            .map_or(0, |e| e.lines().count() + 2)
-        + 1;
-    let h = (fields.len() + ports_rows + notes_rows + 8 + 5) as u16;
     // Centred horizontally but pinned near the top, so the box doesn't jump when the
     // number of fields changes between Serial / TCP / Listen.
     let full = f.area();
     let w = 80.min(full.width);
+    // Notes and errors are wrapped here, indented on every row: the inner
+    // width less the borders and the three-space indent.
+    let text_width = w.saturating_sub(6) as usize;
+    let error_rows: Vec<String> = app.setup.error.as_ref().map_or(Vec::new(), |e| {
+        e.lines().flat_map(|l| wrap_words(l, text_width)).collect()
+    });
+    let note_rows: Vec<String> = app
+        .notes
+        .iter()
+        .flat_map(|n| wrap_words(n, text_width))
+        .collect();
+    let notes_rows = note_rows.len()
+        + if error_rows.is_empty() {
+            0
+        } else {
+            error_rows.len() + 2
+        }
+        + 1;
+    let h = (fields.len() + ports_rows + notes_rows + 8 + 5) as u16;
     let top = if full.height >= h + 2 { 1 } else { 0 };
     let area = Rect {
         x: full.x + (full.width - w) / 2,
@@ -290,17 +301,17 @@ fn draw_setup(f: &mut Frame, app: &App) {
             Span::raw(" to connect"),
         ]));
     }
-    if let Some(e) = &app.setup.error {
+    if !error_rows.is_empty() {
         lines.push(Line::from(""));
-        for l in e.lines() {
+        for row in &error_rows {
             lines.push(Line::from(Span::styled(
-                format!("   {l}"),
+                format!("   {row}"),
                 Style::new().fg(Color::LightRed),
             )));
         }
     }
-    for n in &app.notes {
-        lines.push(Line::from(Span::styled(format!("   {n}"), DIM)));
+    for row in &note_rows {
+        lines.push(Line::from(Span::styled(format!("   {row}"), DIM)));
     }
     f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
     if let Some(c) = cursor {

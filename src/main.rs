@@ -440,6 +440,33 @@ mod screen_tests {
     }
 
     #[test]
+    fn long_start_screen_notes_wrap_with_their_indent() {
+        let dir = std::env::temp_dir().join(format!("rawtap_notes_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let paths = paths::Paths::at(dir.clone());
+        let (cfg, _) = config::load(&paths).unwrap();
+        let note = "Update available: RawTap 0.7.1 → 0.7.2. Ctrl+U to update, or open F1 and choose Updates, or run rawtap update from a terminal.".to_string();
+        // TCP mode: no serial port list to push the note off the screen.
+        let saved = config::Saved {
+            mode: ConnMode::Tcp,
+            ..Default::default()
+        };
+        let mut app = App::new(cfg, paths, saved, vec![note], true);
+        let mut t = Terminal::new(TestBackend::new(90, 40)).unwrap();
+        t.draw(|f| ui::draw(f, &mut app)).unwrap();
+        let screen = screen_text(&t);
+        let rows: Vec<&str> = screen
+            .lines()
+            .skip_while(|l| !l.contains("Update available"))
+            .take(2)
+            .collect();
+        assert_eq!(rows.len(), 2, "the note should wrap onto a second row");
+        let indent = |row: &str| row.find(|c: char| c.is_alphanumeric()).unwrap();
+        assert_eq!(indent(rows[0]), indent(rows[1]), "{rows:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn walkthrough() {
         // Echo server that also says hello.
         let srv = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
