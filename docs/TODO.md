@@ -5,9 +5,9 @@ the Release and Update Standard (see `AGENTS.md`).
 
 ## Now
 
-- **First standard release:** v0.7.0 through the release workflow, then
-  install-test every mode by hand on Linux and Windows, including an update
-  from v0.7.0 to the next release.
+- **Hand-test v0.7.0** (released 2026-11-07): every install mode on Linux
+  and Windows, then the in-app update to the next release (v0.7.1, which
+  carries the Windows clippy fix).
 
 ## Next
 
