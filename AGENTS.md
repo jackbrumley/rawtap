@@ -139,6 +139,9 @@ saying why.
   `src/link/pty.rs` runs a program (the system's `ssh`) in a
   pseudo-terminal with `portable-pty`. RawTap never handles SSH
   credentials: OpenSSH does.
+- `src/app/connect.rs`: opening a connection on a background thread (each
+  attempt has its own event channel), so the start screen shows a spinner
+  and Esc cancels; Ctrl+R's reconnect uses it too.
 - `src/app/setup.rs`: the start screen's fields and the settings and
   profile key they make; `src/app/update_prompt.rs`: update checks and the
   Update Available dialog.

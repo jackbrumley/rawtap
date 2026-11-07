@@ -150,7 +150,6 @@ pub struct Setup {
     pub focus: usize,
     pub ports: Vec<PortInfo>,
     pub error: Option<String>,
-    pub connecting: bool,
     pub options_open: bool,
     pub(super) last_scan: Option<Instant>,
 }

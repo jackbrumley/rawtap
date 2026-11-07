@@ -515,6 +515,56 @@ mod screen_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Enter shows a spinner (and clears the last error) while the connection
+    /// opens in the background; Esc cancels; a failure ends with the reason.
+    #[test]
+    fn connecting_shows_a_spinner_then_the_error() {
+        let dir = std::env::temp_dir().join(format!("rawtap_connecting_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let paths = paths::Paths::at(dir.clone());
+        let (cfg, _) = config::load(&paths).unwrap();
+        // A port nobody listens on: the attempt fails with "refused".
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let saved = config::Saved {
+            mode: ConnMode::Tcp,
+            tcp_host: "127.0.0.1".into(),
+            tcp_port: port.to_string(),
+            ..Default::default()
+        };
+        let mut app = App::new(cfg, paths, saved, Vec::new(), true);
+        app.setup.error = Some("an earlier error".into());
+        let mut t = Terminal::new(TestBackend::new(100, 30)).unwrap();
+
+        key(&mut app, KeyCode::Enter);
+        t.draw(|f| ui::draw(f, &mut app)).unwrap();
+        let screen = screen_text(&t);
+        assert!(screen.contains("Connecting to TCP 127.0.0.1"), "{screen}");
+        assert!(screen.contains("Esc cancels"));
+        assert!(!screen.contains("an earlier error"));
+
+        // Esc cancels; Enter tries again.
+        key(&mut app, KeyCode::Esc);
+        assert!(app.connecting.is_none() && !app.quit);
+        assert_eq!(app.setup.error.as_deref(), Some("Cancelled."));
+        key(&mut app, KeyCode::Enter);
+        assert!(app.connecting.is_some() && app.setup.error.is_none());
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while app.connecting.is_some() && std::time::Instant::now() < deadline {
+            app.tick();
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let error = app.setup.error.clone().unwrap_or_default();
+        assert!(error.contains("Failed to connect"), "{error}");
+        t.draw(|f| ui::draw(f, &mut app)).unwrap();
+        assert!(screen_text(&t).contains("to connect"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn long_start_screen_notes_wrap_with_their_indent() {
         let dir = std::env::temp_dir().join(format!("rawtap_notes_{}", std::process::id()));

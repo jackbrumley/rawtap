@@ -329,11 +329,18 @@ fn draw_setup(f: &mut Frame, app: &App) {
     }
 
     lines.push(Line::from(""));
-    if app.setup.connecting {
-        lines.push(Line::from(Span::styled(
-            "   Connecting…",
-            Style::new().fg(Color::Yellow).add_modifier(Modifier::BOLD),
-        )));
+    if let Some(attempt) = app.connecting.as_ref().filter(|a| !a.reconnect) {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!(
+                    "   {} Connecting to {}…",
+                    crate::app::connect::spinner(attempt.started),
+                    attempt.settings.describe()
+                ),
+                Style::new().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("   Esc cancels", DIM),
+        ]));
     } else {
         lines.push(Line::from(vec![
             Span::raw("   Press "),

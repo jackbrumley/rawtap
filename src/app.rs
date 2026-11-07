@@ -1,5 +1,6 @@
 //! Application state: the setup screen, switching to the monitor, and saved state.
 
+pub mod connect;
 pub mod identity;
 pub mod setup;
 pub mod update_prompt;
@@ -16,7 +17,7 @@ use crate::logger::Logger;
 use crate::monitor::{Action, EntryKind, Monitor};
 use crate::paths::Paths;
 use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------- app
@@ -37,7 +38,8 @@ pub struct App {
     pub notes: Vec<String>,
     pub no_log: bool,
     pub quit: bool,
-    pub pending_connect: bool,
+    /// A connection being opened in the background (spinner, Esc cancels).
+    pub connecting: Option<connect::Connecting>,
     /// Set when the user chose to update: the main loop then quits, restores
     /// the terminal and runs the updater.
     pub update_requested: bool,
@@ -54,7 +56,7 @@ pub struct App {
     /// Keys arriving faster than anyone can type are a paste from the console; collect them.
     paste_buf: Option<String>,
     paste_deadline: Option<Instant>,
-    tx: Sender<LinkEvent>,
+    /// The current connection's events (each connection has its own channel).
     rx: Receiver<LinkEvent>,
 }
 
@@ -66,14 +68,14 @@ impl App {
         notes: Vec<String>,
         no_log: bool,
     ) -> App {
-        let (tx, rx) = mpsc::channel();
+        // No connection yet: a channel nobody sends on.
+        let (_, rx) = mpsc::channel();
         let mut app = App {
             screen: Screen::Setup,
             setup: Setup {
                 focus: 0,
                 ports: Vec::new(),
                 error: None,
-                connecting: false,
                 options_open: false,
                 last_scan: None,
             },
@@ -84,7 +86,7 @@ impl App {
             notes,
             no_log,
             quit: false,
-            pending_connect: false,
+            connecting: None,
             update_requested: false,
             update_check: None,
             update_prompt: None,
@@ -92,17 +94,23 @@ impl App {
             prompt_shown: false,
             paste_buf: None,
             paste_deadline: None,
-            tx,
             rx,
         };
         app.rescan_ports();
         app
     }
 
+    /// Enter on the start screen (or a connection given on the command line):
+    /// check the settings, then open the connection in the background.
     pub fn request_connect(&mut self) {
-        self.pending_connect = true;
-        self.setup.connecting = true;
+        if self.connecting.is_some() {
+            return;
+        }
         self.setup.error = None;
+        match settings_from_saved(&self.saved) {
+            Ok(settings) => self.start_connect(settings, false),
+            Err(error) => self.setup.error = Some(error),
+        }
     }
 
     fn rescan_ports(&mut self) {
@@ -193,10 +201,7 @@ impl App {
                 self.on_paste(t);
             }
         }
-        if self.pending_connect {
-            self.pending_connect = false;
-            self.connect_from_setup();
-        }
+        self.poll_connect();
         if self.screen == Screen::Setup
             && self
                 .setup
@@ -234,26 +239,9 @@ impl App {
         }
     }
 
-    fn connect_from_setup(&mut self) {
-        self.setup.connecting = false;
-        let settings = match settings_from_saved(&self.saved) {
-            Ok(s) => s,
-            Err(e) => {
-                self.setup.error = Some(e);
-                self.screen = Screen::Setup;
-                return;
-            }
-        };
+    /// A connection from the start screen opened: show the monitor.
+    fn open_monitor(&mut self, settings: LinkSettings, link: Link) {
         self.close_monitor();
-        let link = match Link::open(&settings, self.tx.clone()) {
-            Ok(l) => l,
-            Err(e) => {
-                log::warn!("Could not connect to {}: {e}", settings.describe());
-                self.setup.error = Some(e);
-                self.screen = Screen::Setup;
-                return;
-            }
-        };
         let (logger, log_note) = self.make_logger(&settings);
         let (extractor, extract_note) =
             Extractor::new(self.config.image_extraction.as_ref(), &self.paths);
@@ -304,24 +292,22 @@ impl App {
     }
 
     fn reconnect(&mut self) {
+        if self.connecting.is_some() {
+            return;
+        }
         let Some(m) = self.monitor.as_mut() else {
             return;
         };
         m.detach("Disconnected. Reconnecting…");
-        while self.rx.try_recv().is_ok() {}
         let settings = m.settings.clone();
-        match Link::open(&settings, self.tx.clone()) {
-            Ok(link) => {
-                let (logger, note) = self.make_logger(&settings);
-                if let Some(m) = self.monitor.as_mut() {
-                    m.attach(link, logger, note);
-                }
-            }
-            Err(e) => {
-                if let Some(m) = self.monitor.as_mut() {
-                    m.report_error(e);
-                }
-            }
+        self.start_connect(settings, true);
+    }
+
+    /// Ctrl+R's connection opened: attach it to the monitor that's showing.
+    fn reattach(&mut self, settings: &LinkSettings, link: Link) {
+        let (logger, note) = self.make_logger(settings);
+        if let Some(m) = self.monitor.as_mut() {
+            m.attach(link, logger, note);
         }
     }
 
@@ -396,6 +382,11 @@ impl App {
         match self.screen {
             Screen::Setup => self.setup_key(k),
             Screen::Monitor => {
+                // Esc during Ctrl+R's reconnect cancels it.
+                if self.connecting.is_some() && k.code == KeyCode::Esc {
+                    self.cancel_connect();
+                    return;
+                }
                 let Some(m) = self.monitor.as_mut() else {
                     return;
                 };
@@ -420,6 +411,15 @@ impl App {
 
     fn setup_key(&mut self, k: KeyEvent) {
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+        // While connecting the form waits: Esc cancels, Ctrl+Q / Ctrl+C still quit.
+        if self.connecting.is_some() {
+            match k.code {
+                KeyCode::Esc => self.cancel_connect(),
+                KeyCode::Char('q') | KeyCode::Char('c') if ctrl => self.quit = true,
+                _ => {}
+            }
+            return;
+        }
         let fields = Setup::fields(self.saved.mode, self.setup.options_open);
         let n = fields.len();
         self.setup.focus = self.setup.focus.min(n - 1);
