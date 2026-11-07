@@ -68,4 +68,7 @@ jobs:
 
       - name: Check shell script syntax
         if: runner.os == 'Linux'
-        run: bash -n packaging/linux/build-in-container.sh
+        run: |
+          for script in docs/install.sh docs/uninstall.sh packaging/linux/build-in-container.sh; do
+            bash -n "$script"
+          done

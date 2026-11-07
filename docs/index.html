@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RawTap · Install</title>
+  <meta name="description" content="RawTap is a free, open-source serial and TCP monitor and console for Linux and Windows: see and send raw data in hex and text. Install it with one command." />
+  <link rel="icon" href="assets/icon.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="assets/page.css" />
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <nav class="crumb"><a href="/">← All apps</a><a href="/">by Jack Brumley</a></nav>
+      <div class="hero-row">
+        <div class="hero-copy">
+          <span class="hero-tile"><img src="assets/icon.png" alt="" width="64" height="64" /></span>
+          <h1>RawTap</h1>
+          <p class="tagline">See and send raw serial and TCP data, in hex and text, on Linux and Windows. A switch console when you need one.</p>
+        </div>
+        <svg class="hero-art" viewBox="0 0 420 340" aria-hidden="true">
+          <defs>
+            <linearGradient id="h1" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#f59e0b" stop-opacity="0.8" />
+              <stop offset="1" stop-color="#10b981" stop-opacity="0.12" />
+            </linearGradient>
+            <linearGradient id="h2" x1="1" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#10b981" stop-opacity="0.7" />
+              <stop offset="1" stop-color="#d97706" stop-opacity="0.06" />
+            </linearGradient>
+            <linearGradient id="h3" x1="0" y1="1" x2="1" y2="0">
+              <stop offset="0" stop-color="#1b2330" stop-opacity="0.05" />
+              <stop offset="1" stop-color="#d97706" stop-opacity="0.45" />
+            </linearGradient>
+          </defs>
+          <rect x="130" y="50" width="250" height="210" rx="28" fill="url(#h3)" />
+          <rect x="70" y="170" width="150" height="130" rx="22" fill="url(#h1)" />
+          <rect x="300" y="24" width="100" height="90" rx="18" fill="url(#h2)" />
+          <polyline points="150,170 190,170 190,120 240,120 240,170 280,170 280,120 330,120 330,170 360,170" fill="none" stroke="#ffffff" stroke-opacity="0.6" stroke-width="3" stroke-linejoin="round" />
+        </svg>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="install" aria-label="Install">
+      <div class="platform-labels" id="platform-labels" role="tablist">
+        <button type="button" class="platform-label" data-platform="linux" role="tab">Linux</button>
+        <button type="button" class="platform-label" data-platform="windows" role="tab">Windows</button>
+        <div class="platform-tab-indicator" id="platform-tab-indicator"></div>
+      </div>
+
+      <p class="install-hint" id="install-hint" aria-live="polite"></p>
+
+      <div class="install-code-wrapper">
+        <pre class="install-code-block" id="install-code"></pre>
+        <button type="button" class="install-copy-btn" id="install-copy-btn" aria-label="Copy command"></button>
+      </div>
+      <div class="install-variants" id="install-variants"></div>
+      <p class="install-note" id="install-note"></p>
+
+      <div class="install-manual">
+        <a class="manual-btn" href="https://github.com/jackbrumley/rawtap/releases/latest">
+          <svg class="manual-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
+          <span>Manual Download</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="features">
+      <h2>What it does</h2>
+      <ul>
+        <li>Watches a serial port, TCP connection or TCP listener in hex and text, and logs everything to a file</li>
+        <li>A live terminal pane for switch and router consoles: paging, colours and Tab completion work like PuTTY</li>
+        <li>Sends hex or text a line at a time or key by key, hides passwords from the logs, and runs macros that wait for a prompt and save the output</li>
+      </ul>
+    </section>
+
+    <footer class="site-footer">
+      <nav class="other-apps" aria-label="Other apps by Jack Brumley">
+        <div class="other-apps-head">
+          <p class="section-title">Other apps</p>
+          <a class="all-apps" href="https://brumley.info/">All apps &rarr;</a>
+        </div>
+        <ul class="app-tiles">
+          <li>
+            <a class="app-tile" href="https://voquill.org/" style="--app: #5865f2; --app-2: #c43991;">
+              <span class="tile"><img src="assets/icons/voquill.png" alt="" width="34" height="34" /></span>
+              <span class="app-name">Voquill</span>
+            </a>
+          </li>
+          <li>
+            <a class="app-tile" href="https://brumley.info/rusty-g6/" style="--app: #e5483f; --app-2: #ff8a3d;">
+              <span class="tile"><img src="assets/icons/rusty-g6.png" alt="" width="34" height="34" /></span>
+              <span class="app-name">Rusty G6</span>
+            </a>
+          </li>
+          <li>
+            <a class="app-tile" href="https://somedrive.org/" style="--app: #1677d2; --app-2: #22c1c3;">
+              <span class="tile"><img src="assets/icons/somedrive.svg" alt="" width="34" height="34" /></span>
+              <span class="app-name">SomeDrive</span>
+            </a>
+          </li>
+          <li>
+            <a class="app-tile" href="https://yambuck.com/" style="--app: #1f8f9c; --app-2: #5ce0d2;">
+              <span class="tile"><img src="assets/icons/yambuck.svg" alt="" width="34" height="34" /></span>
+              <span class="app-name">Yambuck</span>
+            </a>
+          </li>
+          <li>
+            <a class="app-tile is-current" href="https://brumley.info/rawtap/" aria-current="page" style="--app: #d97706; --app-2: #10b981;">
+              <span class="tile"><img src="assets/icons/rawtap.png" alt="" width="34" height="34" /></span>
+              <span class="app-name">RawTap</span>
+            </a>
+          </li>
+        </ul>
+      </nav>
+      <p class="footer-meta">
+        <span>&copy; Jack Brumley</span>
+        <span aria-hidden="true">&middot;</span>
+        <a href="https://github.com/jackbrumley/rawtap">Source on GitHub</a>
+        <span aria-hidden="true">&middot;</span>
+        <a href="https://www.gnu.org/licenses/agpl-3.0.html">GNU AGPLv3</a>
+      </p>
+    </footer>
+  </main>
+
+  <script src="assets/install-widget.js" defer></script>
+</body>
+</html>

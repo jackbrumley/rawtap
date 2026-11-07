@@ -7,9 +7,8 @@ the procedure; the standard has the reasoning and the full installer and
 updater contracts.
 
 Release identity (tag, title, asset names, download links) is consumed by
-the installer scripts and the in-app updater (both being built: see
-`docs/TODO.md`), so a format mistake breaks updates and one-line installs
-for every user.
+`docs/install.sh`, `docs/install.ps1` and the in-app updater, so a format
+mistake breaks updates and one-line installs for every user.
 
 ## Format
 
@@ -32,9 +31,9 @@ A complete release carries five assets, all named by `scripts/release-assets.mjs
 
 Development happens on `dev`; releases are tagged on `dev`. Promotion
 fast-forwards `main` to the release tag, so `main` always equals the latest
-release. GitHub Pages serves `brumley.info/rawtap/` (the install page and
-installer scripts, once they exist) from `main:/docs`, so promotion also
-deploys installer changes. Never commit to `main` directly.
+release. GitHub Pages serves `brumley.info/rawtap/` (install page and
+installer scripts) from `main:/docs`, so promotion also deploys installer
+changes. Never commit to `main` directly.
 
 ## 1. Prepare and Tag
 
@@ -53,6 +52,9 @@ Pushing the tag starts the **Release** workflow
    and WiX 5 MSI) in parallel and uploads the assets.
 3. **Verify** fails unless the release carries exactly the five assets, each
    with a SHA-256 digest.
+4. **Install test** installs the pre-release with the installer scripts from
+   the tag: `.deb`, AppImage and uninstall on Linux; MSI, setup.exe and
+   uninstall on Windows, checking `rawtap --version` and the PATH each time.
 
 Follow it with:
 ```bash
@@ -82,7 +84,10 @@ the in-app updater and the one-line installers serve the new version.
 
 ## 4. Verify
 
-- The release page lists all five assets and each one downloads.
+- An older installed version offers the update (start screen, F1 → Updates,
+  `rawtap update`) and the update installs and starts the new version.
+- `curl --proto '=https' --tlsv1.2 -sSf https://brumley.info/rawtap/install.sh | bash` installs the new
+  version.
 
 ## When Something Fails
 
@@ -110,7 +115,7 @@ the in-app updater and the one-line installers serve the new version.
 ## Agent Checklist
 
 - [ ] Version prepared with `npm run release:prepare`; tag is `vX.Y.Z`.
-- [ ] Release workflow green: build and verify.
+- [ ] Release workflow green: build, verify and install test.
 - [ ] Notes from `npm run release:notes`; no `TODO`; Downloads block untouched.
 - [ ] Assets only from the workflow or `package-release.mjs`.
 - [ ] `npm run release:promote` only when the maintainer asks.

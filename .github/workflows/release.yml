@@ -2,7 +2,8 @@
 #
 #   Tag push (vX.Y.Z): creates the pre-release (notes skeleton from
 #     release-notes-template.mjs), builds Linux and Windows in parallel,
-#     uploads each platform's assets, then verifies the release is complete.
+#     uploads each platform's assets, verifies the release is complete, then
+#     install-tests it with the installer scripts from the tag.
 #     Promotion to latest stays a deliberate step: npm run release:promote.
 #   Manual run (Actions tab or `gh workflow run release.yml --ref <branch>`):
 #     a dry run that builds and packages all platforms and keeps the files as
@@ -149,3 +150,90 @@ jobs:
         with:
           node-version-file: .node-version
       - run: node scripts/verify-release.mjs
+
+  # Installs the published pre-release with the installer scripts from this
+  # tag (the ones promotion deploys to brumley.info/rawtap), exactly as users
+  # will, and checks each install runs.
+  install-test:
+    name: Install test ${{ matrix.name }}
+    needs: [prepare, verify]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            runner: ubuntu-24.04
+          - name: Windows
+            runner: windows-2022
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+      # Shared runner IPs exhaust GitHub's anonymous API rate limit.
+      RAWTAP_GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install .deb (system package)
+        if: runner.os == 'Linux'
+        run: |
+          bash docs/install.sh --version "$TAG" --yes --no-relaunch
+          /usr/bin/rawtap --version | grep -F "${TAG#v}"
+          test -f /usr/share/applications/info.brumley.rawtap.desktop
+          getent group dialout | cut -d: -f4 | tr ',' '\n' | grep -qx "$(id -un)"
+
+      # Replaces the .deb install with the user-local AppImage.
+      - name: Install AppImage (user-local)
+        if: runner.os == 'Linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: |
+          bash docs/install.sh --version "$TAG" --yes --no-relaunch --appimage
+          "$HOME/.local/bin/rawtap" --version | grep -F "${TAG#v}"
+          test -f "$HOME/.local/share/applications/info.brumley.rawtap.desktop"
+
+      - name: Uninstall (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          bash docs/uninstall.sh --yes
+          test ! -e /usr/bin/rawtap
+          test ! -e "$HOME/.local/bin/rawtap"
+          test ! -e "$HOME/.local/share/applications/info.brumley.rawtap.desktop"
+
+      - name: Install MSI (system-wide)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./docs/install.ps1 -Version $env:TAG -System -NoRelaunch
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $exe = Join-Path $env:ProgramFiles "rawtap\rawtap.exe"
+          $version = & $exe --version
+          Write-Host "Installed: $exe ($version)"
+          if ($version -notmatch [regex]::Escape($env:TAG.TrimStart('v'))) { exit 1 }
+          # The MSI writes the folder with a trailing backslash.
+          $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine") -split ";" | ForEach-Object { $_.TrimEnd("\") }
+          if ($machinePath -notcontains (Join-Path $env:ProgramFiles "rawtap")) { Write-Error "rawtap is not on the system PATH"; exit 1 }
+
+      # Removes the MSI install first (install.ps1 never leaves both).
+      - name: Install setup.exe (user)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./docs/install.ps1 -Version $env:TAG -NoRelaunch
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $dir = Join-Path $env:LOCALAPPDATA "rawtap"
+          $version = & (Join-Path $dir "rawtap.exe") --version
+          Write-Host "Installed: $dir ($version)"
+          if ($version -notmatch [regex]::Escape($env:TAG.TrimStart('v'))) { exit 1 }
+          if (Test-Path (Join-Path $env:ProgramFiles "rawtap\rawtap.exe")) { Write-Error "the MSI install is still there"; exit 1 }
+          $userPath = (Get-Item "HKCU:\Environment").GetValue("Path", "", "DoNotExpandEnvironmentNames")
+          if (($userPath -split ";") -notcontains $dir) { Write-Error "rawtap is not on the user PATH"; exit 1 }
+
+      - name: Uninstall (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./docs/uninstall.ps1
+          $dir = Join-Path $env:LOCALAPPDATA "rawtap"
+          if (Test-Path (Join-Path $dir "rawtap.exe")) { Write-Error "rawtap.exe is still installed"; exit 1 }
+          $userPath = (Get-Item "HKCU:\Environment").GetValue("Path", "", "DoNotExpandEnvironmentNames")
+          if (($userPath -split ";") -contains $dir) { Write-Error "rawtap is still on the user PATH"; exit 1 }
