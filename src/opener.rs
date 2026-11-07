@@ -1,6 +1,7 @@
-//! Opening a file or folder in the desktop's own app: the transcript and the
-//! log folder. Windows uses Notepad for text files and Explorer for folders;
-//! Linux uses `xdg-open`, which needs a desktop session.
+//! Opening a file, folder or web page in the desktop's own app: the
+//! transcript, the log folder and the release notes. Windows uses Notepad for
+//! text files and Explorer for folders and pages; Linux uses `xdg-open`, which
+//! needs a desktop session.
 
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -20,6 +21,31 @@ pub fn open(path: &Path) -> Result<(), String> {
         .spawn()
         .map(|_| log::info!("Opened {}", path.display()))
         .map_err(|error| format!("Could not open {}: {error}", path.display()))
+}
+
+/// Opens a web page (release notes) in the default browser.
+pub fn open_url(url: &str) -> Result<(), String> {
+    browser()?
+        .arg(url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| log::info!("Opened {url}"))
+        .map_err(|error| format!("Could not open {url}: {error}"))
+}
+
+#[cfg(windows)]
+fn browser() -> Result<Command, String> {
+    Ok(Command::new("explorer.exe"))
+}
+
+#[cfg(not(windows))]
+fn browser() -> Result<Command, String> {
+    if std::env::var_os("DISPLAY").is_none() && std::env::var_os("WAYLAND_DISPLAY").is_none() {
+        return Err("No desktop session to open a browser in".into());
+    }
+    Ok(Command::new("xdg-open"))
 }
 
 #[cfg(windows)]

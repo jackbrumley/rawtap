@@ -29,7 +29,7 @@ irm https://brumley.info/rawtap/install.ps1 | iex
 irm https://brumley.info/rawtap/install-system.ps1 | iex
 ```
 
-Both put `rawtap` on your PATH. To update, run `rawtap update`, press **Ctrl+U** on the start screen, or use **F1 → Updates**; RawTap checks for a new version each time it starts. Uninstall with `uninstall.sh` / `uninstall.ps1` from the same site.
+Both put `rawtap` on your PATH. RawTap checks for a new version each time it starts. When there is one, an **Update Available** dialog offers **Update Now**, **View Release Notes** or **Later** (←→ to choose, Enter, Esc for later). After "Later", update with **Ctrl+U** on the start screen, **F1 → Updates**, or `rawtap update`. Uninstall with `uninstall.sh` / `uninstall.ps1` from the same site.
 
 ## Build
 

@@ -1,5 +1,6 @@
 //! Rendering: dispatch, and the setup screen. The monitor screen is in ui_monitor.rs.
 
+use crate::app::update_prompt::UpdatePrompt;
 use crate::app::{App, Screen, Setup};
 use ratatui::{
     Frame,
@@ -20,6 +21,110 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             }
         }
     }
+    if let Some(prompt) = &app.update_prompt {
+        draw_update_prompt(f, prompt);
+    }
+}
+
+/// Greys out everything behind a dialog (the F1 menu, the update dialog).
+pub fn dim(f: &mut Frame) {
+    let area = f.area();
+    f.buffer_mut().set_style(
+        area,
+        Style::new()
+            .fg(Color::DarkGray)
+            .bg(Color::Reset)
+            .remove_modifier(Modifier::all()),
+    );
+}
+
+/// The "Update Available" dialog, worded as in Voquill.
+fn draw_update_prompt(f: &mut Frame, prompt: &UpdatePrompt) {
+    dim(f);
+    let check = &prompt.check;
+    let available = check.update_available;
+    let (title, mut body) = if available {
+        (
+            " Update Available ",
+            vec![
+                format!(
+                    "A newer RawTap version is available. Current: v{} -> Latest: v{}.",
+                    check.current_version, check.latest_version
+                ),
+                String::new(),
+                "Press \"Update Now\" to automatically download and install the latest release. RawTap will restart after updating.".to_string(),
+            ],
+        )
+    } else {
+        (
+            " RawTap is Up to Date ",
+            vec![format!(
+                "You are on the latest version (v{}).",
+                check.current_version
+            )],
+        )
+    };
+    if let Some(error) = &prompt.error {
+        body.push(String::new());
+        body.push(error.clone());
+    }
+
+    let full = f.area();
+    let w = 72.min(full.width.saturating_sub(2)).max(30.min(full.width));
+    let text_width = w.saturating_sub(6) as usize;
+    let mut lines = vec![Line::from("")];
+    for paragraph in &body {
+        if paragraph.is_empty() {
+            lines.push(Line::from(""));
+        }
+        for row in wrap_words(paragraph, text_width) {
+            let style = if prompt.error.as_ref() == Some(paragraph) {
+                Style::new().fg(Color::LightRed)
+            } else {
+                Style::new()
+            };
+            lines.push(Line::from(Span::styled(format!("  {row}"), style)));
+        }
+    }
+    lines.push(Line::from(""));
+    let mut buttons = vec![Span::raw("  ")];
+    for (i, button) in prompt.buttons().iter().enumerate() {
+        if i > 0 {
+            buttons.push(Span::raw("   "));
+        }
+        let style = if *button == prompt.selected {
+            Style::new()
+                .fg(Color::Black)
+                .bg(Color::Green)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::new().fg(Color::White).bg(Color::DarkGray)
+        };
+        buttons.push(Span::styled(
+            format!(" {} ", button.label(available)),
+            style,
+        ));
+    }
+    lines.push(Line::from(buttons));
+    lines.push(Line::from(""));
+
+    let h = (lines.len() as u16 + 2).min(full.height);
+    let area = centered(full, w, h);
+    f.render_widget(Clear, area);
+    let block = Block::bordered()
+        .title(Line::from(Span::styled(
+            title,
+            Style::new()
+                .fg(Color::Black)
+                .bg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        )))
+        .title_bottom(Line::from(Span::styled(
+            " ←→ choose  Enter select  Esc later ",
+            DIM,
+        )))
+        .border_style(Style::new().fg(Color::Green));
+    f.render_widget(Paragraph::new(lines).block(block), area);
 }
 
 pub fn centered(area: Rect, w: u16, h: u16) -> Rect {

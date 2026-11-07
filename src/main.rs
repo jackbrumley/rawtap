@@ -358,10 +358,12 @@ fn main() {
     } else if app.update_requested {
         if let Some(update) = update::available() {
             println!(
-                "Updating RawTap {} → {}…",
+                "Updating RawTap {} → {}.",
                 update.current_version, update.latest_version
             );
         }
+        // Voquill's wording (Release Standard section 7).
+        println!("Starting update... RawTap will restart shortly.");
         run_update();
     }
 }
@@ -390,6 +392,51 @@ mod screen_tests {
                 .collect();
             println!("{}", row.trim_end());
         }
+    }
+
+    fn screen_text(t: &Terminal<TestBackend>) -> String {
+        let buf = t.backend().buffer();
+        (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| buf[(x, y)].symbol().to_string())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn update_dialog_shows_versions_and_buttons() {
+        let dir = std::env::temp_dir().join(format!("rawtap_dialog_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let paths = paths::Paths::at(dir.clone());
+        let (cfg, notes) = config::load(&paths).unwrap();
+        let mut app = App::new(cfg, paths, config::Saved::default(), notes, true);
+        app.update_prompt = Some(app::update_prompt::UpdatePrompt::new(update::UpdateCheck {
+            current_version: "0.7.1".into(),
+            latest_version: "0.7.2".into(),
+            update_available: true,
+            release_url: "https://github.com/jackbrumley/rawtap/releases/tag/v0.7.2".into(),
+        }));
+        let mut t = Terminal::new(TestBackend::new(100, 30)).unwrap();
+        t.draw(|f| ui::draw(f, &mut app)).unwrap();
+        dump(&t, "update dialog");
+        let screen = screen_text(&t);
+        assert!(screen.contains("Update Available"));
+        // Wrapped to the dialog's width, so check the pieces.
+        assert!(screen.contains("Current: v0.7.1 -> Latest:"));
+        assert!(screen.contains("v0.7.2."));
+        for button in ["Later", "View Release Notes", "Update Now"] {
+            assert!(screen.contains(button), "missing {button}");
+        }
+        // Keys go to the dialog, not the start screen behind it; Esc is Later.
+        key(&mut app, KeyCode::Tab);
+        assert!(app.update_prompt.is_some());
+        key(&mut app, KeyCode::Esc);
+        assert!(app.update_prompt.is_none());
+        assert!(!app.quit);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

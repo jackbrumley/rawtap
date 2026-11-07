@@ -1,6 +1,7 @@
 //! Application state: the setup screen, switching to the monitor, and saved state.
 
 pub mod identity;
+pub mod update_prompt;
 
 use crate::config::{self, Config, ConnMode, Saved};
 use crate::extract::Extractor;
@@ -344,6 +345,13 @@ pub struct App {
     /// A running update check, and whether the user asked for it (then the
     /// result is reported even when there's nothing new).
     update_check: Option<(Receiver<Result<crate::update::UpdateCheck, String>>, bool)>,
+    /// The "Update Available" dialog, when it's on screen.
+    pub update_prompt: Option<update_prompt::UpdatePrompt>,
+    /// A check result waiting to be shown as the dialog once nothing else
+    /// needs the keyboard (see `update_prompt::can_show_prompt`).
+    pending_prompt: Option<crate::update::UpdateCheck>,
+    /// The dialog opens by itself once a run; after that only on request.
+    prompt_shown: bool,
     /// Keys arriving faster than anyone can type are a paste from the console; collect them.
     paste_buf: Option<String>,
     paste_deadline: Option<Instant>,
@@ -380,6 +388,9 @@ impl App {
             pending_connect: false,
             update_requested: false,
             update_check: None,
+            update_prompt: None,
+            pending_prompt: None,
+            prompt_shown: false,
             paste_buf: None,
             paste_deadline: None,
             tx,
@@ -408,6 +419,13 @@ impl App {
     /// Handle everything that arrived since the last frame. A burst of typed characters
     /// (Windows Terminal's Ctrl+Shift+V / right-click paste) is treated as one paste.
     pub fn on_events(&mut self, batch: Vec<Event>) {
+        // The update dialog takes keys one by one: a burst is never a paste into it.
+        if self.update_prompt.is_some() {
+            for e in batch {
+                self.on_event(e);
+            }
+            return;
+        }
         fn typed(e: &Event) -> Option<char> {
             let Event::Key(k) = e else { return None };
             if k.kind == KeyEventKind::Release {
@@ -467,63 +485,9 @@ impl App {
     }
 
     /// Called every frame.
-    /// Starts a background update check. `manual`: the user asked, so say
-    /// what it found even when there's nothing new.
-    pub fn start_update_check(&mut self, manual: bool) {
-        if self.update_check.is_none() {
-            self.update_check = Some((crate::update::spawn_check(), manual));
-        }
-    }
-
-    fn poll_update_check(&mut self) {
-        let Some((rx, manual)) = &self.update_check else {
-            return;
-        };
-        let manual = *manual;
-        let result = match rx.try_recv() {
-            Ok(result) => result,
-            Err(mpsc::TryRecvError::Empty) => return,
-            Err(mpsc::TryRecvError::Disconnected) => Err("The update check stopped".into()),
-        };
-        self.update_check = None;
-        self.saved.last_update_check = crate::update::last_checked();
-        let message = match result {
-            Ok(check) if check.update_available => Some((
-                format!(
-                    "Update available: RawTap {} → {}. Ctrl+U on the start screen, F1 → Updates, or run `rawtap update`.",
-                    check.current_version, check.latest_version
-                ),
-                false,
-            )),
-            Ok(_) if manual => Some(("You are already on the latest version.".into(), false)),
-            Ok(_) => None,
-            // A silent start-up check only logs its failure (Release Standard section 7).
-            Err(error) if manual => Some((error, true)),
-            Err(_) => None,
-        };
-        if let Some((message, is_error)) = message {
-            match self.monitor.as_mut() {
-                Some(m) if is_error => m.report_error(message),
-                Some(m) => m.notify(message),
-                None if is_error => self.setup.error = Some(message),
-                None => self.notes.push(message),
-            }
-        }
-    }
-
-    /// Ctrl+U / F1 → Update now: update when a newer version is known,
-    /// otherwise check first.
-    fn request_update(&mut self) {
-        if crate::update::available().is_some() {
-            self.update_requested = true;
-            self.quit = true;
-        } else {
-            self.start_update_check(true);
-        }
-    }
-
     pub fn tick(&mut self) {
         self.poll_update_check();
+        self.show_pending_prompt();
         if self.paste_deadline.is_some_and(|d| Instant::now() >= d) {
             self.paste_deadline = None;
             if let Some(t) = self.paste_buf.take() {
@@ -701,6 +665,14 @@ impl App {
     }
 
     pub fn on_event(&mut self, ev: Event) {
+        if self.update_prompt.is_some() {
+            if let Event::Key(k) = ev
+                && k.kind != KeyEventKind::Release
+            {
+                self.update_prompt_key(k);
+            }
+            return;
+        }
         let k = match ev {
             Event::Key(k) => k,
             Event::Paste(t) => return self.on_paste(t),

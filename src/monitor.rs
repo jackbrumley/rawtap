@@ -367,13 +367,6 @@ impl Monitor {
         Some(message)
     }
 
-    /// Shows a message in the raw log and on the status line.
-    pub fn notify(&mut self, message: String) {
-        log::info!("{message}");
-        self.set_status(message.clone(), false);
-        self.push(EntryKind::Info(message));
-    }
-
     /// Shows an error in the raw log and on the status line, and writes it to
     /// the session log.
     pub fn report_error(&mut self, message: String) {

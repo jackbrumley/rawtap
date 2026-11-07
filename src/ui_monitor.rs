@@ -11,7 +11,7 @@ use crate::config::{Layout as PaneLayout, LogFormat};
 use crate::link::LinkSettings;
 use crate::menu::{self, Kind};
 use crate::monitor::{Entry, EntryKind, Monitor, Pane};
-use crate::ui::{DIM, centered};
+use crate::ui::{DIM, centered, dim};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
@@ -59,17 +59,6 @@ pub fn draw(f: &mut Frame, m: &mut Monitor) {
 }
 
 /// Grey out everything already drawn, so a pop-up on top is the only thing in focus.
-fn dim(f: &mut Frame) {
-    let area = f.area();
-    f.buffer_mut().set_style(
-        area,
-        Style::new()
-            .fg(Color::DarkGray)
-            .bg(Color::Reset)
-            .remove_modifier(Modifier::all()),
-    );
-}
-
 /// Paint the terminal selection: `abs_top` is the absolute row shown at the top of the pane.
 fn highlight_term(f: &mut Frame, m: &Monitor, inner: Rect, abs_top: usize) {
     let Some(s) = m

@@ -195,9 +195,12 @@ saying why.
 - **Release procedure:** follow `docs/RELEASE.md`. Never run
   `npm run release:promote` unless the maintainer asks.
 - **In-app update:** the standard's "Terminal apps" flow (`src/update.rs`).
-  The check runs in the background at start-up; an available update shows
-  on the start screen (Ctrl+U) and in F1 → Updates; `rawtap update` does the
-  same from the command line. Linux: after the TUI closes, RawTap replaces
+  The check runs in the background at start-up. An available update opens
+  the "Update Available" dialog (`src/app/update_prompt.rs`, worded as in
+  Voquill: Later, View Release Notes, Update Now) once a run, as soon as
+  nothing else needs the keyboard (not over live keys, a hidden send, a
+  paste confirmation, a macro or the F1 menu). After "Later": Ctrl+U on the
+  start screen, F1 → Updates, or `rawtap update`. Linux: after the TUI closes, RawTap replaces
   itself (`exec`) with the update script in the same terminal; install.sh
   then starts the new version on `/dev/tty`. Windows: the update runs in its
   own console window (`CREATE_NEW_CONSOLE`, not detached, so its output is
