@@ -1,6 +1,6 @@
 [package]
 name = "rawtap"
-version = "0.7.2"
+version = "0.7.3"
 edition = "2024"
 license = "AGPL-3.0-only"
 description = "See and send raw serial and TCP data, in hex and text. A console when you need one."
