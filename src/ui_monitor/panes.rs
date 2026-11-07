@@ -264,7 +264,7 @@ pub(super) fn vt_color(c: vt100::Color) -> Color {
 
 pub(super) fn draw_term(f: &mut Frame, m: &mut Monitor, area: Rect) {
     let inner = Block::bordered().inner(area);
-    m.term.resize(inner.height, inner.width);
+    m.resize_terminal(inner.height, inner.width);
     m.term_rows = inner.height;
     m.term_inner = inner;
     let abs_top = m.term.abs_top();

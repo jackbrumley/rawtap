@@ -392,17 +392,17 @@ pub(super) fn draw_help(f: &mut Frame) {
         ),
         l("  F-keys still work. Keys typed at a 'Password:' prompt are logged as <hidden>."),
         l(""),
-        h("Files"),
-        l("  logs\\*.log  hex log, both directions     logs\\*.txt  plain-text transcript"),
-        l(
-            "  captures\\   macro captures               rawtap_config.json  macros, image extraction",
-        ),
+        h("Files (in ~/.config/rawtap)"),
+        l("  logs/*.log  hex log, both directions     logs/*.txt  plain-text transcript"),
+        l("  captures/   macro captures               settings.json  macros, image extraction"),
         l(""),
         h("Command line"),
         l(
             "  rawtap serial -p COM3 -b 9600  ·  rawtap tcp -H 10.0.0.5 -p 2101  ·  rawtap listen -p 9000",
         ),
-        l("  rawtap ports  (list serial ports)  ·   --no-log  skip log files"),
+        l(
+            "  rawtap telnet -H 10.0.0.1  ·  rawtap ports  (list serial ports)  ·  --no-log  skip log files",
+        ),
         l(""),
         Line::from(Span::styled("  Any key closes this.", DIM)),
     ];

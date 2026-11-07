@@ -85,6 +85,15 @@ enum Cmd {
         #[arg(long)]
         bind: Option<String>,
     },
+    /// Telnet to a switch, router or server
+    Telnet {
+        /// Host name or IP
+        #[arg(short = 'H', long)]
+        host: Option<String>,
+        /// Telnet port (default: last used, else 23)
+        #[arg(short, long)]
+        port: Option<u16>,
+    },
     /// List serial ports and exit
     Ports,
     /// Update RawTap to the latest release (re-runs the installer)
@@ -154,6 +163,16 @@ fn apply_cli(cmd: &Option<Cmd>, s: &mut config::Saved) -> bool {
                 s.tcp_port = p.to_string();
             }
             host.is_some() && port.is_some()
+        }
+        Some(Cmd::Telnet { host, port }) => {
+            s.mode = ConnMode::Telnet;
+            if let Some(h) = host {
+                s.telnet_host = h.clone();
+            }
+            if let Some(p) = port {
+                s.telnet_port = p.to_string();
+            }
+            host.is_some()
         }
         Some(Cmd::Listen { port, bind }) => {
             s.mode = ConnMode::Listen;

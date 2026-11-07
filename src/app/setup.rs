@@ -28,6 +28,8 @@ pub enum Field {
     TcpPort,
     Bind,
     ListenPort,
+    TelnetHost,
+    TelnetPort,
     Logging,
     Options,
     OptLineEnding,
@@ -50,6 +52,8 @@ impl Field {
             Field::TcpPort => "TCP port",
             Field::Bind => "Listen on",
             Field::ListenPort => "TCP port",
+            Field::TelnetHost => "Host / IP",
+            Field::TelnetPort => "Telnet port",
             Field::Logging => "Log to file",
             Field::Options => "Options",
             Field::OptLineEnding => "  Line ending",
@@ -63,7 +67,7 @@ impl Field {
     pub fn description(self) -> &'static str {
         match self {
             Field::Mode => {
-                "Serial: a serial port (USB adapter or console cable). TCP client: connect out to an IP and port. TCP server: wait for a device to connect to this computer."
+                "Serial: a serial port (USB adapter or console cable). TCP client: raw TCP out to an IP and port. TCP server: wait for a device to connect to this computer. Telnet: a switch or router's Telnet login."
             }
             Field::SerialPort => {
                 "The serial port to open. ←→ cycles through the ports detected on this computer, or type a name such as COM3 (Windows) or /dev/ttyUSB0 (Linux)."
@@ -78,7 +82,7 @@ impl Field {
                 "Usually None. Hardware uses the RTS/CTS wires; Software uses XON/XOFF characters."
             }
             Field::Host => {
-                "Host name or IP address of the device or terminal server. Note: raw TCP, not telnet."
+                "Host name or IP address of the device or terminal server. Raw TCP: for a Telnet login (port 23), choose Telnet as the connection."
             }
             Field::TcpPort => {
                 "Port number on that host, e.g. a terminal server's raw TCP port for the device."
@@ -88,6 +92,10 @@ impl Field {
             }
             Field::ListenPort => {
                 "Port devices will connect to on this computer. A firewall may need to allow it."
+            }
+            Field::TelnetHost => "Host name or IP address of the switch, router or server.",
+            Field::TelnetPort => {
+                "Usually 23. RawTap answers the Telnet negotiation, reports its window size and says it's an XTERM."
             }
             Field::Logging => {
                 "Write a hex log and a plain-text transcript of the session to the logs folder."
@@ -111,6 +119,8 @@ impl Field {
                 | Field::TcpPort
                 | Field::Bind
                 | Field::ListenPort
+                | Field::TelnetHost
+                | Field::TelnetPort
         )
     }
 }
@@ -143,6 +153,7 @@ impl Setup {
             ]),
             ConnMode::Tcp => f.extend([Field::Host, Field::TcpPort]),
             ConnMode::Listen => f.extend([Field::Bind, Field::ListenPort]),
+            ConnMode::Telnet => f.extend([Field::TelnetHost, Field::TelnetPort]),
         }
         f.push(Field::Logging);
         f.push(Field::Options);
@@ -218,6 +229,7 @@ pub fn form_profile_key(s: &Saved) -> String {
         ConnMode::Serial => format!("serial:{}", serial_key(s.serial_port.trim())),
         ConnMode::Tcp => format!("tcp:{}:{}", s.tcp_host.trim(), port(&s.tcp_port)),
         ConnMode::Listen => format!("listen:{}", port(&s.listen_port)),
+        ConnMode::Telnet => format!("telnet:{}:{}", s.telnet_host.trim(), port(&s.telnet_port)),
     }
 }
 
@@ -227,6 +239,7 @@ pub fn profile_key(s: &LinkSettings) -> String {
         LinkSettings::Serial { port, .. } => format!("serial:{}", serial_key(port)),
         LinkSettings::TcpClient { host, port } => format!("tcp:{host}:{port}"),
         LinkSettings::TcpListen { port, .. } => format!("listen:{port}"),
+        LinkSettings::Telnet { host, port } => format!("telnet:{host}:{port}"),
     }
 }
 
@@ -305,6 +318,16 @@ pub fn settings_from_saved(s: &Saved) -> Result<LinkSettings, String> {
             Ok(LinkSettings::TcpListen {
                 bind,
                 port: port_num(&s.listen_port, "TCP port")?,
+            })
+        }
+        ConnMode::Telnet => {
+            let host = s.telnet_host.trim().to_string();
+            if host.is_empty() {
+                return Err("Enter a host name or IP address.".into());
+            }
+            Ok(LinkSettings::Telnet {
+                host,
+                port: port_num(&s.telnet_port, "Telnet port")?,
             })
         }
     }

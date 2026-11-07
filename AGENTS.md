@@ -130,7 +130,12 @@ saying why.
 - `src/ui_monitor.rs`: drawing the monitor; `src/ui_monitor/panes.rs` (raw
   log and terminal) and `src/ui_monitor/controls.rs` (send box, footer, menu,
   help).
-- `src/link.rs`: serial, TCP client and TCP server, each with a reader thread.
+- `src/link.rs`: serial, TCP client, TCP server and Telnet, each with a
+  reader thread; `src/link/telnet.rs` is the Telnet protocol (negotiation,
+  window size, break), with no network code.
+- `src/app/setup.rs`: the start screen's fields and the settings and
+  profile key they make; `src/app/update_prompt.rs`: update checks and the
+  Update Available dialog.
 - `src/term.rs`: terminal emulation (vt100), live keys, transcript.
 - `src/codec.rs`, `src/macros.rs`, `src/menu.rs`, `src/clip.rs`,
   `src/extract.rs`, `src/logger.rs`, `src/config.rs`: hex/text codec,

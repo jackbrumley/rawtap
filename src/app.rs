@@ -454,6 +454,8 @@ impl App {
             Field::TcpPort => &mut s.tcp_port,
             Field::Bind => &mut s.listen_bind,
             Field::ListenPort => &mut s.listen_port,
+            Field::TelnetHost => &mut s.telnet_host,
+            Field::TelnetPort => &mut s.telnet_port,
             _ => return None,
         })
     }
@@ -499,7 +501,12 @@ impl App {
                     }
                 }
             }
-            Field::Host | Field::TcpPort | Field::Bind | Field::ListenPort => {}
+            Field::Host
+            | Field::TcpPort
+            | Field::Bind
+            | Field::ListenPort
+            | Field::TelnetHost
+            | Field::TelnetPort => {}
         }
     }
 
@@ -526,6 +533,8 @@ impl App {
             Field::TcpPort => s.tcp_port.clone(),
             Field::Bind => s.listen_bind.clone(),
             Field::ListenPort => s.listen_port.clone(),
+            Field::TelnetHost => s.telnet_host.clone(),
+            Field::TelnetPort => s.telnet_port.clone(),
             Field::Logging => {
                 if s.logging {
                     "Yes".into()

@@ -4,7 +4,7 @@ See and send raw serial and TCP data, in hex and text. A console when you need o
 
 RawTap started as a small Python monitor (`rawtap.py`) and is now a single program for Linux and Windows that also works as a switch/console terminal.
 
-- Watches a serial port, TCP connection or TCP listener in **hex and text**, and logs everything. It also pulls scanner images out of the stream, as before.
+- Watches a serial port, TCP connection, TCP listener or **Telnet** session in **hex and text**, and logs everything. It also pulls scanner images out of the stream, as before.
 - **Live terminal pane** shows the device the way PuTTY does: `--More--` paging, backspaces and colours all work.
 - **Sends** hex or ASCII a whole line at a time, or every keystroke live (Tab completion, `?`, Ctrl+C...).
 - **Hidden sends** for passwords. Passwords typed at a `Password:` prompt never reach the log either.
@@ -115,7 +115,7 @@ Everything below is also in the F1 menu. The shortcuts are for when you already 
 | F1 / Ctrl+P | menu |
 | F2 / F3 / F4 | line ending / layout / live keys |
 | F5 | which pane PgUp/PgDn scroll (split layout) |
-| F6 / F7 | hidden send / serial break (300 ms, for password recovery and ROMMON) |
+| F6 / F7 | hidden send / break (300 ms on serial, for password recovery and ROMMON; Telnet's break command on Telnet) |
 | F8 / F9 / F10 | log format / pause-follow the log / clear both panes (the files keep everything) |
 | PgUp/PgDn, Ctrl+Home/End | scroll the focused pane / jump to its top or bottom |
 | Ctrl+T | char delay 0 / 2 / 5 / 10 / 20 / 50 ms between sent characters, for consoles that garble fast input (remembered per connection) |
@@ -157,6 +157,7 @@ rawtap                                   start screen
 rawtap serial -p COM3 -b 9600            (also --data-bits --parity --stop-bits --flow)
 rawtap tcp -H 192.168.1.50 -p 2101       connect out
 rawtap listen -p 9000 [--bind 0.0.0.0]   wait for a client
+rawtap telnet -H 192.168.1.1 [-p 23]     Telnet login to a switch or router
 rawtap serial -p /dev/ttyUSB0 -b 9600    (Linux)
 rawtap ports                             list serial ports
 rawtap update                            update to the latest release
@@ -172,8 +173,8 @@ Same settings as the Python version (`image_extraction` in the config), plus:
 
 ## Limitations
 
-- Raw TCP only, no telnet negotiation. Connecting to a switch's port 23 shows the telnet handshake bytes and some option prompts won't work. A serial console or a raw TCP port (terminal server) is fine.
-- Break works on serial ports only.
+- For a switch's Telnet login (port 23), choose **Telnet** as the connection: RawTap answers the Telnet negotiation (it lets the device echo, reports its window size and says it's an XTERM) and notes what was agreed in the raw log. **TCP client** stays raw: every byte, no negotiation, for terminal servers and devices.
+- Break works on serial ports and Telnet.
 - When the window is resized, existing terminal lines aren't re-wrapped (PuTTY doesn't re-wrap them either).
 
 ## Code layout

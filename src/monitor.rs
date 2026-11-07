@@ -286,6 +286,11 @@ impl Monitor {
 
     pub fn attach(&mut self, link: Link, logger: Option<Logger>, note: Option<String>) {
         link.set_pacing(self.profile.char_delay_ms);
+        // Telnet reports this size once the device asks for it.
+        let (rows, cols) = self.term.size();
+        if let Err(error) = link.resize(cols, rows) {
+            log::warn!("Could not set the window size: {error}");
+        }
         self.link = Some(link);
         let mut transcript_note = None;
         self.transcript = logger
@@ -365,6 +370,19 @@ impl Monitor {
         self.logger = None;
         self.transcript = None;
         Some(message)
+    }
+
+    /// The terminal pane is drawn at this size: resize the emulator and tell the
+    /// connection (Telnet reports it to the device).
+    pub fn resize_terminal(&mut self, rows: u16, cols: u16) {
+        if !self.term.resize(rows, cols) {
+            return;
+        }
+        let (rows, cols) = self.term.size();
+        let result = self.link.as_ref().map_or(Ok(()), |l| l.resize(cols, rows));
+        if let Err(error) = result {
+            self.report_error(format!("Could not send the window size: {error}"));
+        }
     }
 
     /// Shows an error in the raw log and on the status line, and writes it to
@@ -606,6 +624,11 @@ impl Monitor {
             LinkEvent::SendError(m) => {
                 self.flush_pending();
                 self.push(EntryKind::Error(format!("Send failed: {m}")));
+            }
+            LinkEvent::Info(m) => {
+                self.flush_pending();
+                log::info!("{m}");
+                self.push(EntryKind::Info(m));
             }
         }
     }

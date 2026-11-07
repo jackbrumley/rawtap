@@ -47,10 +47,13 @@ impl Term {
 
     /// Resize to the pane. When it gets shorter, vt100 keeps the cursor line on screen and
     /// pushes the rows above into the scrollback.
-    pub fn resize(&mut self, rows: u16, cols: u16) {
-        if self.size() != (rows.max(1), cols.max(1)) {
-            self.parser.set_size(nz(rows), nz(cols));
+    /// Returns true when the size changed.
+    pub fn resize(&mut self, rows: u16, cols: u16) -> bool {
+        if self.size() == (rows.max(1), cols.max(1)) {
+            return false;
         }
+        self.parser.set_size(nz(rows), nz(cols));
+        true
     }
 
     pub fn screen(&self) -> &vt100::Screen {

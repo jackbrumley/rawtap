@@ -1,5 +1,8 @@
-//! Connections: serial port, TCP client, TCP server (one client at a time).
-//! A background thread reads and posts events; sends go through a shared writer.
+//! Connections: serial port, TCP client, TCP server (one client at a time),
+//! Telnet. A background thread reads and posts events; sends go through a
+//! shared writer.
+
+mod telnet;
 
 use serialport::{DataBits, FlowControl, Parity, StopBits};
 use std::io::{ErrorKind, Read, Write};
@@ -20,6 +23,9 @@ pub enum LinkEvent {
     PeerDisconnected(String),
     /// A queued send failed (sends happen on a background thread).
     SendError(String),
+    /// Something the raw log should say about the connection itself, e.g.
+    /// what Telnet agreed with the device.
+    Info(String),
 }
 
 #[derive(Clone, Debug)]
@@ -40,6 +46,10 @@ pub enum LinkSettings {
         bind: String,
         port: u16,
     },
+    Telnet {
+        host: String,
+        port: u16,
+    },
 }
 
 impl LinkSettings {
@@ -48,6 +58,7 @@ impl LinkSettings {
             LinkSettings::Serial { .. } => "serial",
             LinkSettings::TcpClient { .. } => "tcp",
             LinkSettings::TcpListen { .. } => "listen",
+            LinkSettings::Telnet { .. } => "telnet",
         }
     }
 
@@ -85,6 +96,7 @@ impl LinkSettings {
             }
             LinkSettings::TcpClient { host, port } => format!("TCP {host}:{port}"),
             LinkSettings::TcpListen { bind, port } => format!("TCP server {bind}:{port}"),
+            LinkSettings::Telnet { host, port } => format!("Telnet {host}:{port}"),
         }
     }
 }
@@ -120,6 +132,8 @@ pub struct Link {
     out_handle: Option<JoinHandle<()>>,
     /// Delay between characters, in ms (0 = send at full speed).
     pacing_ms: Arc<AtomicU64>,
+    /// The Telnet session, on a Telnet connection.
+    telnet: Option<Arc<Mutex<telnet::Telnet>>>,
 }
 
 impl Link {
@@ -127,6 +141,7 @@ impl Link {
         let stop = Arc::new(AtomicBool::new(false));
         let writer: SharedWriter = Arc::new(Mutex::new(None));
         let err_tx = tx.clone();
+        let mut telnet_session = None;
         let handle = match settings {
             LinkSettings::Serial {
                 port,
@@ -204,6 +219,17 @@ impl Link {
                     }
                 })
             }
+            LinkSettings::Telnet { host, port } => {
+                let stream = connect_tcp(host, *port)?;
+                let _ = stream.set_nodelay(true);
+                let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
+                let reader = stream.try_clone().map_err(|e| e.to_string())?;
+                *writer.lock().unwrap() = Some(Writer::Tcp(stream));
+                let session = Arc::new(Mutex::new(telnet::Telnet::new()));
+                telnet_session = Some(session.clone());
+                let (stop2, writer2) = (stop.clone(), writer.clone());
+                thread::spawn(move || telnet_read_loop(reader, session, writer2, stop2, tx))
+            }
             LinkSettings::TcpListen { bind, port } => {
                 let listener = TcpListener::bind((bind.as_str(), *port))
                     .map_err(|e| listen_error(bind, *port, &e))?;
@@ -230,6 +256,7 @@ impl Link {
             out: Some(out),
             out_handle: Some(out_handle),
             pacing_ms,
+            telnet: telnet_session,
         })
     }
 
@@ -238,9 +265,14 @@ impl Link {
         if self.writer.lock().unwrap().is_none() {
             return Err("no client connected yet".into());
         }
+        // On Telnet a 255 byte would start a command: double it.
+        let data = match self.telnet {
+            Some(_) => telnet::escape(data),
+            None => data.to_vec(),
+        };
         match &self.out {
             Some(out) => out
-                .send(data.to_vec())
+                .send(data)
                 .map_err(|_| "connection is closing".to_string()),
             None => Err("connection is closing".into()),
         }
@@ -250,16 +282,34 @@ impl Link {
         self.pacing_ms.store(ms, Ordering::Relaxed);
     }
 
-    /// Hold the serial line in break for `dur` (Cisco/HP password recovery, ROMMON).
+    /// Hold the serial line in break for `dur` (Cisco/HP password recovery,
+    /// ROMMON); on Telnet, send Telnet's break command.
     pub fn send_break(&self, dur: Duration) -> Result<(), String> {
-        let guard = self.writer.lock().unwrap();
-        match guard.as_ref() {
+        let mut guard = self.writer.lock().unwrap();
+        match guard.as_mut() {
             Some(Writer::Serial(p)) => {
                 p.set_break().map_err(|e| e.to_string())?;
                 thread::sleep(dur);
                 p.clear_break().map_err(|e| e.to_string())
             }
-            Some(Writer::Tcp(_)) => Err("break only works on a serial port".into()),
+            Some(w @ Writer::Tcp(_)) if self.telnet.is_some() => write_all(w, &telnet::BREAK),
+            Some(Writer::Tcp(_)) => Err("break only works on a serial port or Telnet".into()),
+            None => Err("not connected".into()),
+        }
+    }
+
+    /// The terminal pane is now `cols`×`rows`. Telnet reports it to the device
+    /// when the device asked (NAWS); other connections have no window size.
+    pub fn resize(&self, cols: u16, rows: u16) -> Result<(), String> {
+        let Some(session) = &self.telnet else {
+            return Ok(());
+        };
+        let Some(message) = session.lock().unwrap().resize(cols, rows) else {
+            return Ok(());
+        };
+        let mut guard = self.writer.lock().unwrap();
+        match guard.as_mut() {
+            Some(w) => write_all(w, &message),
             None => Err("not connected".into()),
         }
     }
@@ -385,6 +435,50 @@ fn listen_loop(
     }
 }
 
+/// Reads a Telnet connection: answers negotiation straight away, posts the
+/// device's data, and posts what was agreed for the raw log.
+fn telnet_read_loop(
+    mut reader: TcpStream,
+    session: Arc<Mutex<telnet::Telnet>>,
+    writer: SharedWriter,
+    stop: Arc<AtomicBool>,
+    tx: Sender<LinkEvent>,
+) {
+    let mut buf = [0u8; 4096];
+    while !stop.load(Ordering::Relaxed) {
+        let n = match reader.read(&mut buf) {
+            Ok(0) => {
+                let _ = tx.send(LinkEvent::Closed("Connection closed by peer.".into()));
+                break;
+            }
+            Ok(n) => n,
+            Err(e) if is_transient(&e) => continue,
+            Err(e) => {
+                let _ = tx.send(LinkEvent::Closed(format!("Connection lost: {e}")));
+                break;
+            }
+        };
+        let received = session.lock().unwrap().receive(&buf[..n]);
+        if !received.replies.is_empty() {
+            let result = match writer.lock().unwrap().as_mut() {
+                Some(w) => write_all(w, &received.replies),
+                None => Err("not connected".into()),
+            };
+            if let Err(e) = result {
+                let _ = tx.send(LinkEvent::SendError(format!("Telnet reply failed: {e}")));
+            }
+        }
+        for note in received.notes {
+            if tx.send(LinkEvent::Info(note)).is_err() {
+                return;
+            }
+        }
+        if !received.data.is_empty() && tx.send(LinkEvent::Data(received.data)).is_err() {
+            break;
+        }
+    }
+}
+
 fn is_transient(e: &std::io::Error) -> bool {
     matches!(
         e.kind(),
@@ -483,6 +577,92 @@ mod tests {
                 return ev;
             }
         }
+    }
+
+    /// A fake Telnet switch: negotiates like a Cisco, greets, then reports
+    /// everything the client sends back on `seen`.
+    #[test]
+    fn telnet_negotiates_and_passes_clean_data() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (seen_tx, seen_rx) = mpsc::channel::<Vec<u8>>();
+        thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            // IAC WILL ECHO, IAC WILL SGA, IAC DO NAWS, then a prompt.
+            sock.write_all(&[255, 251, 1, 255, 251, 3, 255, 253, 31])
+                .unwrap();
+            sock.write_all(b"\r\nUsername: ").unwrap();
+            sock.set_read_timeout(Some(Duration::from_millis(200)))
+                .unwrap();
+            let mut buf = [0u8; 256];
+            loop {
+                match sock.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if seen_tx.send(buf[..n].to_vec()).is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) if is_transient(&e) => {}
+                    Err(_) => break,
+                }
+            }
+        });
+
+        let (tx, rx) = mpsc::channel();
+        let link = Link::open(
+            &LinkSettings::Telnet {
+                host: "127.0.0.1".into(),
+                port,
+            },
+            tx,
+        )
+        .unwrap();
+
+        // What was agreed is noted for the raw log (before the data), and the
+        // device's data arrives without the negotiation.
+        wait_for(
+            &rx,
+            |e| matches!(e, LinkEvent::Info(m) if m.contains("window size")),
+        );
+        let LinkEvent::Data(data) = wait_for(&rx, |e| matches!(e, LinkEvent::Data(_))) else {
+            unreachable!()
+        };
+        assert_eq!(data, b"\r\nUsername: ");
+
+        // Answers: DO ECHO, DO SGA, WILL NAWS, then the window size (80×24
+        // until the monitor reports the pane's size).
+        let mut replies = Vec::new();
+        let wanted = [
+            255, 253, 1, 255, 253, 3, 255, 251, 31, 255, 250, 31, 0, 80, 0, 24, 255, 240,
+        ];
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while replies.len() < wanted.len() && Instant::now() < deadline {
+            if let Ok(chunk) = seen_rx.recv_timeout(Duration::from_millis(200)) {
+                replies.extend(chunk);
+            }
+        }
+        assert_eq!(replies, wanted);
+
+        // A resize is reported, a 255 byte is doubled, and F7 sends IAC BRK.
+        // (A break goes out straight away, ahead of anything still queued, as
+        // on serial, so each is checked in turn.)
+        let receive = |count: usize| {
+            let mut got = Vec::new();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while got.len() < count && Instant::now() < deadline {
+                if let Ok(chunk) = seen_rx.recv_timeout(Duration::from_millis(200)) {
+                    got.extend(chunk);
+                }
+            }
+            got
+        };
+        link.resize(120, 40).unwrap();
+        assert_eq!(receive(9), [255, 250, 31, 0, 120, 0, 40, 255, 240]);
+        link.send(&[b'a', 255]).unwrap();
+        assert_eq!(receive(3), [b'a', 255, 255]);
+        link.send_break(Duration::ZERO).unwrap();
+        assert_eq!(receive(2), [255, 243]);
     }
 
     #[test]
