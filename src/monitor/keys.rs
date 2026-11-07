@@ -113,6 +113,11 @@ impl Monitor {
                     Err(error) => self.report_error(error),
                 }
             }
+            Cmd::CheckForUpdates => {
+                self.set_status("Checking for updates…", false);
+                return Action::CheckForUpdates;
+            }
+            Cmd::UpdateNow => return Action::UpdateNow,
             Cmd::Reconnect => return Action::Reconnect,
             Cmd::NewConnection => return Action::NewConnection,
             Cmd::Quit => return Action::Quit,

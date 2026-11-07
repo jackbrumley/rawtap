@@ -287,6 +287,8 @@ pub struct Saved {
     pub logging: bool,
     /// Session log level (F1 → Debug): error, warn, info, debug or trace.
     pub log_level: String,
+    /// When the update check last finished (F1 → Updates, "Last checked").
+    pub last_update_check: Option<String>,
     pub history: Vec<HistoryItem>,
     pub profiles: BTreeMap<String, Profile>,
 }
@@ -307,6 +309,7 @@ impl Default for Saved {
             listen_port: String::new(),
             logging: true,
             log_level: crate::session_log::level_name(crate::session_log::DEFAULT_LEVEL).into(),
+            last_update_check: None,
             history: Vec::new(),
             profiles: BTreeMap::new(),
         }

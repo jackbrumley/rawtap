@@ -11,6 +11,26 @@ RawTap started as a small Python monitor (`rawtap.py`) and is now a single progr
 - **Macros** that can wait for a prompt and save the output, e.g. one key to save a switch's running-config to a file.
 - One small program (`rawtap` / `rawtap.exe`), no Python. Run it with no arguments for the start screen, or use it from the command line.
 
+## Install
+
+Install page: <https://brumley.info/rawtap>
+
+```bash
+# Linux: the .deb or .rpm (asks for your password, adds you to the serial-port group)
+curl --proto '=https' --tlsv1.2 -sSf https://brumley.info/rawtap/install.sh | bash
+# Linux: the AppImage in ~/.local/bin, for any distro
+curl --proto '=https' --tlsv1.2 -sSf https://brumley.info/rawtap/install.sh | bash -s -- --appimage
+```
+
+```powershell
+# Windows, just for you (no admin)
+irm https://brumley.info/rawtap/install.ps1 | iex
+# Windows, every user (PowerShell as Administrator)
+irm https://brumley.info/rawtap/install-system.ps1 | iex
+```
+
+Both put `rawtap` on your PATH. To update, run `rawtap update`, press **Ctrl+U** on the start screen, or use **F1 → Updates**; RawTap checks for a new version each time it starts. Uninstall with `uninstall.sh` / `uninstall.ps1` from the same site.
+
 ## Build
 
 ```bash
@@ -139,6 +159,7 @@ rawtap tcp -H 192.168.1.50 -p 2101       connect out
 rawtap listen -p 9000 [--bind 0.0.0.0]   wait for a client
 rawtap serial -p /dev/ttyUSB0 -b 9600    (Linux)
 rawtap ports                             list serial ports
+rawtap update                            update to the latest release
 rawtap --system-info                     version, OS and terminal, for bug reports
 --no-log                                 don't write log/transcript files
 ```

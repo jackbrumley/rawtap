@@ -338,6 +338,12 @@ pub struct App {
     pub no_log: bool,
     pub quit: bool,
     pub pending_connect: bool,
+    /// Set when the user chose to update: the main loop then quits, restores
+    /// the terminal and runs the updater.
+    pub update_requested: bool,
+    /// A running update check, and whether the user asked for it (then the
+    /// result is reported even when there's nothing new).
+    update_check: Option<(Receiver<Result<crate::update::UpdateCheck, String>>, bool)>,
     /// Keys arriving faster than anyone can type are a paste from the console; collect them.
     paste_buf: Option<String>,
     paste_deadline: Option<Instant>,
@@ -372,6 +378,8 @@ impl App {
             no_log,
             quit: false,
             pending_connect: false,
+            update_requested: false,
+            update_check: None,
             paste_buf: None,
             paste_deadline: None,
             tx,
@@ -459,7 +467,63 @@ impl App {
     }
 
     /// Called every frame.
+    /// Starts a background update check. `manual`: the user asked, so say
+    /// what it found even when there's nothing new.
+    pub fn start_update_check(&mut self, manual: bool) {
+        if self.update_check.is_none() {
+            self.update_check = Some((crate::update::spawn_check(), manual));
+        }
+    }
+
+    fn poll_update_check(&mut self) {
+        let Some((rx, manual)) = &self.update_check else {
+            return;
+        };
+        let manual = *manual;
+        let result = match rx.try_recv() {
+            Ok(result) => result,
+            Err(mpsc::TryRecvError::Empty) => return,
+            Err(mpsc::TryRecvError::Disconnected) => Err("The update check stopped".into()),
+        };
+        self.update_check = None;
+        self.saved.last_update_check = crate::update::last_checked();
+        let message = match result {
+            Ok(check) if check.update_available => Some((
+                format!(
+                    "Update available: RawTap {} → {}. Ctrl+U on the start screen, F1 → Updates, or run `rawtap update`.",
+                    check.current_version, check.latest_version
+                ),
+                false,
+            )),
+            Ok(_) if manual => Some(("You are already on the latest version.".into(), false)),
+            Ok(_) => None,
+            // A silent start-up check only logs its failure (Release Standard section 7).
+            Err(error) if manual => Some((error, true)),
+            Err(_) => None,
+        };
+        if let Some((message, is_error)) = message {
+            match self.monitor.as_mut() {
+                Some(m) if is_error => m.report_error(message),
+                Some(m) => m.notify(message),
+                None if is_error => self.setup.error = Some(message),
+                None => self.notes.push(message),
+            }
+        }
+    }
+
+    /// Ctrl+U / F1 → Update now: update when a newer version is known,
+    /// otherwise check first.
+    fn request_update(&mut self) {
+        if crate::update::available().is_some() {
+            self.update_requested = true;
+            self.quit = true;
+        } else {
+            self.start_update_check(true);
+        }
+    }
+
     pub fn tick(&mut self) {
+        self.poll_update_check();
         if self.paste_deadline.is_some_and(|d| Instant::now() >= d) {
             self.paste_deadline = None;
             if let Some(t) = self.paste_buf.take() {
@@ -663,6 +727,8 @@ impl App {
                     Action::None => {}
                     Action::Quit => self.quit = true,
                     Action::Reconnect => self.reconnect(),
+                    Action::CheckForUpdates => self.start_update_check(true),
+                    Action::UpdateNow => self.request_update(),
                     Action::NewConnection => {
                         self.close_monitor();
                         self.store_state_reporting();
@@ -684,6 +750,7 @@ impl App {
         let field = fields[self.setup.focus];
         match k.code {
             KeyCode::Char('q') | KeyCode::Char('c') if ctrl => self.quit = true,
+            KeyCode::Char('u') if ctrl => self.request_update(),
             KeyCode::Esc => self.quit = true,
             KeyCode::Up | KeyCode::BackTab => self.setup.focus = (self.setup.focus + n - 1) % n,
             KeyCode::Down | KeyCode::Tab => self.setup.focus = (self.setup.focus + 1) % n,

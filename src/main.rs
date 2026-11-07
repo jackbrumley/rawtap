@@ -18,6 +18,7 @@ mod system_info;
 mod term;
 mod ui;
 mod ui_monitor;
+mod update;
 
 use app::App;
 use clap::{Parser, Subcommand};
@@ -38,6 +39,9 @@ struct Cli {
     /// Print the details a bug report needs (version, OS, terminal) and exit
     #[arg(long)]
     system_info: bool,
+    /// Set by the updater when an update failed: say so on the start screen
+    #[arg(long, hide = true)]
+    update_failed: bool,
 }
 
 #[derive(Subcommand)]
@@ -83,6 +87,8 @@ enum Cmd {
     },
     /// List serial ports and exit
     Ports,
+    /// Update RawTap to the latest release (re-runs the installer)
+    Update,
 }
 
 pub fn set_title(t: &str) {
@@ -101,7 +107,7 @@ fn capitalise(s: &str) -> String {
 /// Fold command-line options into the saved settings. Returns true if there's enough to connect.
 fn apply_cli(cmd: &Option<Cmd>, s: &mut config::Saved) -> bool {
     match cmd {
-        None | Some(Cmd::Ports) => false,
+        None | Some(Cmd::Ports) | Some(Cmd::Update) => false,
         Some(Cmd::Serial {
             port,
             baud,
@@ -244,8 +250,49 @@ fn start(cli: &Cli) -> Result<(App, bool), String> {
     }
     let (cfg, config_notes) = config::load(&paths)?;
     notes.extend(config_notes);
+    if cli.update_failed {
+        let message = update::update_failed_message();
+        log::warn!("{message}");
+        notes.push(message);
+    }
+    update::set_last_checked(saved.last_update_check.clone());
     let direct = apply_cli(&cli.cmd, &mut saved);
     Ok((App::new(cfg, paths, saved, notes, cli.no_log), direct))
+}
+
+/// `rawtap update`: check, then update if there's something newer.
+fn update_command() {
+    match update::check() {
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        Ok(check) if !check.update_available => {
+            println!("RawTap {} is the latest version.", check.current_version);
+        }
+        Ok(check) => {
+            println!(
+                "Updating RawTap {} → {}…",
+                check.current_version, check.latest_version
+            );
+            run_update();
+        }
+    }
+}
+
+/// Runs the updater once the terminal is back to normal. On Linux it
+/// replaces this process; on Windows it opens its own window.
+fn run_update() {
+    match update::run_update() {
+        Ok(()) => {
+            println!("The update continues in a new window; RawTap starts again when it's done.")
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            wait_for_enter();
+            std::process::exit(1);
+        }
+    }
 }
 
 fn main() {
@@ -254,6 +301,11 @@ fn main() {
 
     if cli.system_info {
         println!("{}", system_info::SystemInfo::collect().summary());
+        return;
+    }
+
+    if let Some(Cmd::Update) = cli.cmd {
+        update_command();
         return;
     }
 
@@ -272,6 +324,8 @@ fn main() {
     if direct {
         app.request_connect();
     }
+    // Silent: a failure is only logged (Release Standard section 7).
+    app.start_update_check(false);
 
     let mut terminal = ratatui::init();
     // RawTap handles the mouse itself (wheel scrolling, selection) so the console doesn't turn
@@ -301,6 +355,14 @@ fn main() {
     log::info!("SESSION END");
     if failed {
         wait_for_enter();
+    } else if app.update_requested {
+        if let Some(update) = update::available() {
+            println!(
+                "Updating RawTap {} → {}…",
+                update.current_version, update.latest_version
+            );
+        }
+        run_update();
     }
 }
 

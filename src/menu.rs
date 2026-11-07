@@ -23,6 +23,8 @@ pub enum Cmd {
     CopySessionLog,
     OpenLogFolder,
     CopySystemInfo,
+    CheckForUpdates,
+    UpdateNow,
     Reconnect,
     NewConnection,
     Quit,
@@ -305,6 +307,34 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         "Closes RawTap. Settings and history are saved. Ctrl+Shift+Q also quits from live keys."
             .into(),
         Cmd::Quit,
+    ));
+
+    // Updates (Release Standard section 7).
+    let version = env!("CARGO_PKG_VERSION");
+    let last_checked = crate::update::last_checked().unwrap_or_else(|| "never".into());
+    if let Some(update) = crate::update::available() {
+        v.push(cmd(
+            "UPDATES",
+            &format!("Update to {}", update.latest_version),
+            "",
+            format!(
+                "Installs RawTap {} (you have {version}) with the same installer as the website, then starts it again. Release notes: {}",
+                update.latest_version, update.release_url
+            ),
+            Cmd::UpdateNow,
+        ));
+    }
+    let check_state = match crate::update::status() {
+        crate::update::Status::Checking => " Checking now…".to_string(),
+        crate::update::Status::Failed(error) => format!(" The last check failed: {error}"),
+        crate::update::Status::NotChecked | crate::update::Status::Checked(_) => String::new(),
+    };
+    v.push(cmd(
+        "UPDATES",
+        "Check for updates",
+        "",
+        format!("You have RawTap {version}. Last checked: {last_checked}.{check_state}"),
+        Cmd::CheckForUpdates,
     ));
 
     // Debug (App Standard section 4): what a bug report needs.

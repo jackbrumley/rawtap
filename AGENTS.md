@@ -118,6 +118,7 @@ saying why.
   `rawtap --system-info`.
 - `src/opener.rs`: opening a file or folder (Notepad / Explorer on Windows,
   `xdg-open` on Linux).
+- `src/update.rs`: the update check and running the installer.
 - `src/app/identity.rs`: `APP_ID` and its tests; the launcher is
   `packaging/info.brumley.rawtap.desktop` (`Terminal=true`).
 - `src/app.rs`, `src/ui.rs`: the start screen and app wiring.
@@ -142,9 +143,13 @@ saying why.
   (`windows/rawtap.nsi`, `windows/rawtap.wxs`, `windows/path-helper.ps1`).
 - `.github/workflows/ci.yml`: the pre-submit checks on every push and pull
   request, on Linux and Windows.
-- `.github/workflows/release.yml`: builds and verifies releases.
-- `docs/RELEASE.md`: the release procedure.
-- `docs/TODO.md`: known bugs and planned work (Now / Next / Ideas).
+- `.github/workflows/release.yml`: builds, verifies and install-tests
+  releases; `docs/RELEASE.md` is the procedure.
+- `docs/`: served by GitHub Pages at `https://brumley.info/rawtap/`: the
+  install page (`index.html`, `assets/`), the one-line installers
+  (`install.sh`, `uninstall.sh`, `install.ps1`, `install-system.ps1`,
+  `uninstall.ps1`), `RELEASE.md` and `TODO.md`. Promotion to `main` deploys
+  them.
 
 ## Variations
 
@@ -155,9 +160,10 @@ saying why.
   the status line.
 - **Checks:** no frontend, so no `typecheck`, `lint` or frontend build. The
   root `package.json` holds only repository scripts and has no version.
-- **Settings layout:** the F1 menu is the settings screen; Debug (Copy log,
-  Open log folder, Copy system info, Log level) is its last section. Updates
-  joins it with the in-app updater.
+- **Settings layout:** the F1 menu is the settings screen, which lists
+  actions first; Updates (Update to X.Y.Z, Check for updates with "Last
+  checked") and Debug (Copy log, Open log folder, Copy system info, Log
+  level) are its last two sections.
 - **Settings and state:** `settings.json` is edited by hand (macros,
   folders, image extraction) and only read by RawTap, which writes the
   starter template when it's missing. Everything RawTap changes itself,
@@ -184,4 +190,17 @@ saying why.
   MSI `UpgradeCode` in `rawtap.wxs` never changes.
 - **Release procedure:** follow `docs/RELEASE.md`. Never run
   `npm run release:promote` unless the maintainer asks.
-- **In-app update:** the standard's "Terminal apps" flow.
+- **In-app update:** the standard's "Terminal apps" flow (`src/update.rs`).
+  The check runs in the background at start-up; an available update shows
+  on the start screen (Ctrl+U) and in F1 → Updates; `rawtap update` does the
+  same from the command line. Linux: after the TUI closes, RawTap replaces
+  itself (`exec`) with the update script in the same terminal; install.sh
+  then starts the new version on `/dev/tty`. Windows: the update runs in its
+  own console window (`CREATE_NEW_CONSOLE`, not detached, so its output is
+  visible) and RawTap exits; install.ps1 starts the new version. The update
+  script's output goes to the terminal; install.sh / install.ps1 write
+  `debug/update.log` themselves.
+- **Install modes:** install.sh adds the user to the serial-port group
+  (`dialout`, or `uucp` on Arch) in both modes, instead of a udev rule.
+  install.ps1's user install is the NSIS `setup.exe` in
+  `%LOCALAPPDATA%\rawtap`; `-System` is the MSI in `Program Files\rawtap`.
