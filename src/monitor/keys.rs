@@ -22,6 +22,7 @@ impl Monitor {
                 if self.live {
                     if self.layout == Layout::Hex {
                         self.layout = Layout::Split;
+                        self.view_chosen = true;
                     }
                     self.focus = Pane::Terminal;
                     self.term.scroll_to(0);
@@ -120,6 +121,7 @@ impl Monitor {
             Cmd::UpdateNow => return Action::UpdateNow,
             Cmd::Reconnect => return Action::Reconnect,
             Cmd::NewConnection => return Action::NewConnection,
+            Cmd::SaveFavourite => return Action::SaveFavourite,
             Cmd::Quit => return Action::Quit,
         }
         Action::None

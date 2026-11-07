@@ -1,14 +1,13 @@
 //! Application state: the setup screen, switching to the monitor, and saved state.
 
 pub mod connect;
+pub mod favourites;
+mod form;
 pub mod identity;
 pub mod setup;
 pub mod update_prompt;
 
-use setup::{
-    BAUDS, DATA_BITS, FLOWS, Field, PARITIES, STOP_BITS, Setup, cycle_in, form_profile_key,
-    profile_key, scan_ports, settings_from_saved,
-};
+use setup::{Row, Setup, connection_settings, profile_key, scan_ports};
 
 use crate::config::{self, Config, Saved};
 use crate::extract::Extractor;
@@ -16,7 +15,7 @@ use crate::link::{Link, LinkEvent, LinkSettings};
 use crate::logger::Logger;
 use crate::monitor::{Action, EntryKind, Monitor};
 use crate::paths::Paths;
-use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
@@ -48,6 +47,8 @@ pub struct App {
     update_check: Option<(Receiver<Result<crate::update::UpdateCheck, String>>, bool)>,
     /// The "Update Available" dialog, when it's on screen.
     pub update_prompt: Option<update_prompt::UpdatePrompt>,
+    /// Saving, editing or removing a favourite.
+    pub favourite_dialog: Option<favourites::FavouriteDialog>,
     /// A check result waiting to be shown as the dialog once nothing else
     /// needs the keyboard (see `update_prompt::can_show_prompt`).
     pending_prompt: Option<crate::update::UpdateCheck>,
@@ -90,6 +91,7 @@ impl App {
             update_requested: false,
             update_check: None,
             update_prompt: None,
+            favourite_dialog: None,
             pending_prompt: None,
             prompt_shown: false,
             paste_buf: None,
@@ -97,6 +99,7 @@ impl App {
             rx,
         };
         app.rescan_ports();
+        app.home_focus();
         app
     }
 
@@ -107,7 +110,7 @@ impl App {
             return;
         }
         self.setup.error = None;
-        match settings_from_saved(&self.saved) {
+        match connection_settings(&self.saved.connection) {
             Ok(settings) => self.start_connect(settings, false),
             Err(error) => self.setup.error = Some(error),
         }
@@ -116,18 +119,18 @@ impl App {
     fn rescan_ports(&mut self) {
         self.setup.ports = scan_ports();
         self.setup.last_scan = Some(Instant::now());
-        if self.saved.serial_port.trim().is_empty()
+        if self.saved.connection.serial_port.trim().is_empty()
             && let Some(p) = self.setup.ports.first()
         {
-            self.saved.serial_port = p.name.clone();
+            self.saved.connection.serial_port = p.name.clone();
         }
     }
 
     /// Handle everything that arrived since the last frame. A burst of typed characters
     /// (the console's own paste) is treated as one paste.
     pub fn on_events(&mut self, batch: Vec<Event>) {
-        // The update dialog takes keys one by one: a burst is never a paste into it.
-        if self.update_prompt.is_some() {
+        // Dialogs take keys one by one: a burst is never a paste into them.
+        if self.update_prompt.is_some() || self.favourite_dialog.is_some() {
             for e in batch {
                 self.on_event(e);
             }
@@ -174,6 +177,9 @@ impl App {
     }
 
     fn on_paste(&mut self, text: String) {
+        if self.favourite_dialog.is_some() {
+            return self.favourite_dialog_paste(&text);
+        }
         match self.screen {
             Screen::Monitor => {
                 if let Some(m) = self.monitor.as_mut() {
@@ -181,8 +187,7 @@ impl App {
                 }
             }
             Screen::Setup => {
-                let fields = Setup::fields(self.saved.mode, self.setup.options_open);
-                if let Some(f) = fields.get(self.setup.focus).copied()
+                if let Some(Row::Field(f)) = self.focused_row()
                     && let Some(t) = self.text_mut(f)
                 {
                     t.push_str(text.lines().next().unwrap_or("").trim());
@@ -258,7 +263,7 @@ impl App {
             settings.clone(),
             key,
             profile,
-            self.saved.view,
+            self.view_for_connection(),
             self.saved.history.clone(),
             macros,
             extractor,
@@ -318,7 +323,9 @@ impl App {
             self.saved
                 .profiles
                 .insert(m.profile_key.clone(), m.profile.clone());
-            self.saved.view = m.layout;
+            if m.view_chosen {
+                self.saved.view = m.layout;
+            }
             m.detach("Session closed.");
         }
         while self.rx.try_recv().is_ok() {}
@@ -332,7 +339,9 @@ impl App {
             self.saved
                 .profiles
                 .insert(m.profile_key.clone(), m.profile.clone());
-            self.saved.view = m.layout;
+            if m.view_chosen {
+                self.saved.view = m.layout;
+            }
         }
         self.saved.log_level = crate::session_log::level_name(log::max_level()).into();
         config::store_saved(&self.paths, &self.saved).inspect_err(|error| log::error!("{error}"))
@@ -363,6 +372,14 @@ impl App {
                 && k.kind != KeyEventKind::Release
             {
                 self.update_prompt_key(k);
+            }
+            return;
+        }
+        if self.favourite_dialog.is_some() {
+            match ev {
+                Event::Key(k) if k.kind != KeyEventKind::Release => self.favourite_dialog_key(k),
+                Event::Paste(text) => self.favourite_dialog_paste(&text),
+                _ => {}
             }
             return;
         }
@@ -399,187 +416,17 @@ impl App {
                     Action::Reconnect => self.reconnect(),
                     Action::CheckForUpdates => self.start_update_check(true),
                     Action::UpdateNow => self.request_update(),
+                    Action::SaveFavourite => self.save_session_as_favourite(),
                     Action::NewConnection => {
                         self.close_monitor();
                         self.store_state_reporting();
                         self.screen = Screen::Setup;
-                        self.setup.focus = 0;
                         self.rescan_ports();
+                        self.home_focus();
                         crate::set_title("RawTap");
                     }
                 }
             }
-        }
-    }
-
-    fn setup_key(&mut self, k: KeyEvent) {
-        let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
-        // While connecting the form waits: Esc cancels, Ctrl+Q still quits.
-        if self.connecting.is_some() {
-            match k.code {
-                KeyCode::Esc => self.cancel_connect(),
-                KeyCode::Char('q') if ctrl => self.quit = true,
-                _ => {}
-            }
-            return;
-        }
-        let fields = Setup::fields(self.saved.mode, self.setup.options_open);
-        let n = fields.len();
-        self.setup.focus = self.setup.focus.min(n - 1);
-        let field = fields[self.setup.focus];
-        match k.code {
-            KeyCode::Char('q') if ctrl => self.quit = true,
-            KeyCode::Char('u') if ctrl => self.request_update(),
-            KeyCode::Up => self.setup.focus = (self.setup.focus + n - 1) % n,
-            KeyCode::Down => self.setup.focus = (self.setup.focus + 1) % n,
-            KeyCode::Left => self.cycle(field, -1),
-            KeyCode::Right => self.cycle(field, 1),
-            KeyCode::Enter if field == Field::Options => self.cycle(field, 1),
-            KeyCode::Enter => self.request_connect(),
-            KeyCode::F(5) => self.rescan_ports(),
-            KeyCode::Backspace => {
-                if let Some(t) = self.text_mut(field) {
-                    t.pop();
-                }
-            }
-            KeyCode::Char(c) if !ctrl || k.modifiers.contains(KeyModifiers::ALT) => {
-                if let Some(t) = self.text_mut(field) {
-                    t.push(c);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn text_mut(&mut self, f: Field) -> Option<&mut String> {
-        let s = &mut self.saved;
-        Some(match f {
-            Field::SerialPort => &mut s.serial_port,
-            Field::Baud => &mut s.baud,
-            Field::Host => &mut s.tcp_host,
-            Field::TcpPort => &mut s.tcp_port,
-            Field::Bind => &mut s.listen_bind,
-            Field::ListenPort => &mut s.listen_port,
-            Field::TelnetHost => &mut s.telnet_host,
-            Field::TelnetPort => &mut s.telnet_port,
-            Field::SshHost => &mut s.ssh_host,
-            Field::SshUser => &mut s.ssh_user,
-            Field::SshPort => &mut s.ssh_port,
-            _ => return None,
-        })
-    }
-
-    fn cycle(&mut self, f: Field, dir: i32) {
-        let s = &mut self.saved;
-        match f {
-            Field::Mode => s.mode = s.mode.cycle(dir),
-            Field::SerialPort => {
-                let names: Vec<&str> = self.setup.ports.iter().map(|p| p.name.as_str()).collect();
-                if !names.is_empty() {
-                    s.serial_port = cycle_in(&names, &s.serial_port, dir);
-                }
-            }
-            Field::Baud => s.baud = cycle_in(BAUDS, &s.baud, dir),
-            Field::DataBits => s.data_bits = cycle_in(DATA_BITS, &s.data_bits, dir),
-            Field::Parity => s.parity = cycle_in(PARITIES, &s.parity, dir),
-            Field::StopBits => s.stop_bits = cycle_in(STOP_BITS, &s.stop_bits, dir),
-            Field::Flow => s.flow = cycle_in(FLOWS, &s.flow, dir),
-            Field::Logging => s.logging = !s.logging,
-            Field::Options => self.setup.options_open = !self.setup.options_open,
-            // The view is one setting for every connection, not per profile.
-            Field::OptLayout => s.view = crate::menu::step(&crate::config::VIEWS, s.view, dir),
-            Field::OptLineEnding | Field::OptCharDelay | Field::OptSendMode => {
-                use crate::codec::LineEnding as L;
-                let key = form_profile_key(s);
-                let p = s.profiles.entry(key).or_default();
-                match f {
-                    Field::OptLineEnding => {
-                        p.line_ending =
-                            crate::menu::step(&[L::None, L::Cr, L::Lf, L::Crlf], p.line_ending, dir)
-                    }
-                    Field::OptCharDelay => {
-                        p.char_delay_ms =
-                            crate::menu::step(&crate::menu::CHAR_DELAYS, p.char_delay_ms, dir)
-                    }
-                    _ => {
-                        p.input_mode =
-                            crate::menu::step(&crate::menu::input_modes(), p.input_mode, dir)
-                    }
-                }
-            }
-            Field::Host
-            | Field::TcpPort
-            | Field::Bind
-            | Field::ListenPort
-            | Field::TelnetHost
-            | Field::TelnetPort
-            | Field::SshHost
-            | Field::SshUser
-            | Field::SshPort => {}
-        }
-    }
-
-    /// The remembered profile for what's typed in the form (defaults if none yet).
-    pub fn form_profile(&self) -> crate::config::Profile {
-        self.saved
-            .profiles
-            .get(&form_profile_key(&self.saved))
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    pub fn field_value(&self, f: Field) -> String {
-        let s = &self.saved;
-        match f {
-            Field::Mode => s.mode.label().to_string(),
-            Field::SerialPort => s.serial_port.clone(),
-            Field::Baud => s.baud.clone(),
-            Field::DataBits => s.data_bits.clone(),
-            Field::Parity => s.parity.clone(),
-            Field::StopBits => s.stop_bits.clone(),
-            Field::Flow => s.flow.clone(),
-            Field::Host => s.tcp_host.clone(),
-            Field::TcpPort => s.tcp_port.clone(),
-            Field::Bind => s.listen_bind.clone(),
-            Field::ListenPort => s.listen_port.clone(),
-            Field::TelnetHost => s.telnet_host.clone(),
-            Field::TelnetPort => s.telnet_port.clone(),
-            Field::SshHost => s.ssh_host.clone(),
-            Field::SshUser => s.ssh_user.clone(),
-            Field::SshPort => s.ssh_port.clone(),
-            Field::Logging => {
-                if s.logging {
-                    "Yes".into()
-                } else {
-                    "No".into()
-                }
-            }
-            Field::Options => {
-                let p = self.form_profile();
-                let delay = if p.char_delay_ms == 0 {
-                    "no delay".to_string()
-                } else {
-                    format!("{} ms delay", p.char_delay_ms)
-                };
-                let arrow = if self.setup.options_open {
-                    "▾"
-                } else {
-                    "▸"
-                };
-                format!(
-                    "{arrow} {} · {delay} · {} · {}",
-                    p.line_ending.label(),
-                    p.input_mode.label(),
-                    self.saved.view.label()
-                )
-            }
-            Field::OptLineEnding => self.form_profile().line_ending.label().into(),
-            Field::OptCharDelay => match self.form_profile().char_delay_ms {
-                0 => "off".into(),
-                ms => format!("{ms} ms"),
-            },
-            Field::OptSendMode => self.form_profile().input_mode.label().into(),
-            Field::OptLayout => self.saved.view.label().into(),
         }
     }
 }

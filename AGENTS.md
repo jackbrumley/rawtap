@@ -142,14 +142,20 @@ saying why.
 - `src/app/connect.rs`: opening a connection on a background thread (each
   attempt has its own event channel), so the start screen shows a spinner
   and Esc cancels; Ctrl+R's reconnect uses it too.
-- `src/app/setup.rs`: the start screen's fields and the settings and
-  profile key they make; `src/app/update_prompt.rs`: update checks and the
-  Update Available dialog.
+- `src/app/setup.rs`: the start screen's rows (favourites, then fields)
+  and the settings and profile key a connection makes; `src/app/form.rs`:
+  the start screen's keys and field values; `src/app/update_prompt.rs`:
+  update checks and the Update Available dialog.
+- `src/app/favourites.rs`: favourites (named connections in `state.json`,
+  each with a "Last used" or fixed view): Ctrl+S, F2, Del, F1 → Save as
+  favourite, `rawtap open`; `src/ui/favourites.rs` draws their rows and
+  dialog.
 - `src/term.rs`: terminal emulation (vt100), live keys, transcript.
 - `src/codec.rs`, `src/macros.rs`, `src/menu.rs`, `src/clip.rs`,
   `src/extract.rs`, `src/logger.rs`, `src/config.rs`: hex/text codec,
   macros, menu items, clipboard, image extraction, the traffic log, config.
-- `src/switch_sim.rs`: end-to-end test against a fake Cisco-style switch.
+- `src/switch_sim.rs`: end-to-end test against a fake Cisco-style switch;
+  `src/screen_tests.rs`: screens drawn into a test terminal.
 - `scripts/`: the file size check (`check-file-lines.mjs`) and the release
   tooling (`release:*` npm scripts; asset names only from
   `release-assets.mjs`).

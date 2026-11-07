@@ -1,7 +1,7 @@
 //! The start screen: its fields, the detected serial ports, and turning
 //! what's filled in into connection settings and a per-connection profile key.
 
-use crate::config::{ConnMode, Saved};
+use crate::config::{ConnMode, Connection, Saved};
 use crate::link::LinkSettings;
 use serialport::{DataBits, FlowControl, Parity, StopBits};
 use std::time::Instant;
@@ -141,6 +141,13 @@ impl Field {
     }
 }
 
+/// A row on the start screen: the favourites, then the form's fields.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Row {
+    Favourite(usize),
+    Field(Field),
+}
+
 pub struct PortInfo {
     pub name: String,
     pub desc: String,
@@ -155,6 +162,17 @@ pub struct Setup {
 }
 
 impl Setup {
+    pub fn rows(saved: &Saved, options_open: bool) -> Vec<Row> {
+        (0..saved.favourites.len())
+            .map(Row::Favourite)
+            .chain(
+                Setup::fields(saved.connection.mode, options_open)
+                    .into_iter()
+                    .map(Row::Field),
+            )
+            .collect()
+    }
+
     pub fn fields(mode: ConnMode, options_open: bool) -> Vec<Field> {
         let mut f = vec![Field::Mode];
         match mode {
@@ -233,24 +251,24 @@ pub(super) fn cycle_in(list: &[&str], current: &str, dir: i32) -> String {
     list[next as usize].to_string()
 }
 
-/// The profile key for what's currently typed in the start screen (matches `profile_key`).
-pub fn form_profile_key(s: &Saved) -> String {
+/// The profile key for a connection as typed in (matches `profile_key`).
+pub fn connection_profile_key(c: &Connection) -> String {
     let port = |p: &str| {
         p.trim()
             .parse::<u16>()
             .map(|n| n.to_string())
             .unwrap_or_else(|_| p.trim().to_string())
     };
-    match s.mode {
-        ConnMode::Serial => format!("serial:{}", serial_key(s.serial_port.trim())),
-        ConnMode::Tcp => format!("tcp:{}:{}", s.tcp_host.trim(), port(&s.tcp_port)),
-        ConnMode::Listen => format!("listen:{}", port(&s.listen_port)),
-        ConnMode::Telnet => format!("telnet:{}:{}", s.telnet_host.trim(), port(&s.telnet_port)),
+    match c.mode {
+        ConnMode::Serial => format!("serial:{}", serial_key(c.serial_port.trim())),
+        ConnMode::Tcp => format!("tcp:{}:{}", c.tcp_host.trim(), port(&c.tcp_port)),
+        ConnMode::Listen => format!("listen:{}", port(&c.listen_port)),
+        ConnMode::Telnet => format!("telnet:{}:{}", c.telnet_host.trim(), port(&c.telnet_port)),
         ConnMode::Ssh => format!(
             "ssh:{}@{}:{}",
-            s.ssh_user.trim(),
-            s.ssh_host.trim(),
-            port(&s.ssh_port)
+            c.ssh_user.trim(),
+            c.ssh_host.trim(),
+            port(&c.ssh_port)
         ),
     }
 }
@@ -276,40 +294,40 @@ fn serial_key(port: &str) -> String {
     }
 }
 
-pub fn settings_from_saved(s: &Saved) -> Result<LinkSettings, String> {
+pub fn connection_settings(c: &Connection) -> Result<LinkSettings, String> {
     let port_num = |v: &str, what: &str| -> Result<u16, String> {
         match v.trim().parse::<u16>() {
             Ok(p) if p > 0 => Ok(p),
             _ => Err(format!("{what} must be a number from 1 to 65535")),
         }
     };
-    match s.mode {
+    match c.mode {
         ConnMode::Serial => {
-            let port = s.serial_port.trim().to_string();
+            let port = c.serial_port.trim().to_string();
             if port.is_empty() {
                 return Err("Pick a serial port (←/→ cycles through the detected ones).".into());
             }
-            let baud = match s.baud.trim().parse::<u32>() {
+            let baud = match c.baud.trim().parse::<u32>() {
                 Ok(b) if b > 0 => b,
                 _ => return Err("Baud rate must be a number, e.g. 9600".into()),
             };
-            let data_bits = match s.data_bits.as_str() {
+            let data_bits = match c.data_bits.as_str() {
                 "5" => DataBits::Five,
                 "6" => DataBits::Six,
                 "7" => DataBits::Seven,
                 _ => DataBits::Eight,
             };
-            let parity = match s.parity.to_ascii_lowercase().as_str() {
+            let parity = match c.parity.to_ascii_lowercase().as_str() {
                 "odd" | "o" => Parity::Odd,
                 "even" | "e" => Parity::Even,
                 _ => Parity::None,
             };
-            let stop_bits = if s.stop_bits == "2" {
+            let stop_bits = if c.stop_bits == "2" {
                 StopBits::Two
             } else {
                 StopBits::One
             };
-            let flow = match s.flow.to_ascii_lowercase().as_str() {
+            let flow = match c.flow.to_ascii_lowercase().as_str() {
                 "software" | "xonxoff" => FlowControl::Software,
                 "hardware" | "rtscts" => FlowControl::Hardware,
                 _ => FlowControl::None,
@@ -324,44 +342,44 @@ pub fn settings_from_saved(s: &Saved) -> Result<LinkSettings, String> {
             })
         }
         ConnMode::Tcp => {
-            let host = s.tcp_host.trim().to_string();
+            let host = c.tcp_host.trim().to_string();
             if host.is_empty() {
                 return Err("Enter a host name or IP address.".into());
             }
             Ok(LinkSettings::TcpClient {
                 host,
-                port: port_num(&s.tcp_port, "TCP port")?,
+                port: port_num(&c.tcp_port, "TCP port")?,
             })
         }
         ConnMode::Listen => {
-            let bind = match s.listen_bind.trim() {
+            let bind = match c.listen_bind.trim() {
                 "" => "0.0.0.0".to_string(),
                 b => b.to_string(),
             };
             Ok(LinkSettings::TcpListen {
                 bind,
-                port: port_num(&s.listen_port, "TCP port")?,
+                port: port_num(&c.listen_port, "TCP port")?,
             })
         }
         ConnMode::Telnet => {
-            let host = s.telnet_host.trim().to_string();
+            let host = c.telnet_host.trim().to_string();
             if host.is_empty() {
                 return Err("Enter a host name or IP address.".into());
             }
             Ok(LinkSettings::Telnet {
                 host,
-                port: port_num(&s.telnet_port, "Telnet port")?,
+                port: port_num(&c.telnet_port, "Telnet port")?,
             })
         }
         ConnMode::Ssh => {
-            let host = s.ssh_host.trim().to_string();
+            let host = c.ssh_host.trim().to_string();
             if host.is_empty() {
                 return Err("Enter a host name, IP address or ~/.ssh/config alias.".into());
             }
             Ok(LinkSettings::Ssh {
                 host,
-                user: s.ssh_user.trim().to_string(),
-                port: port_num(&s.ssh_port, "SSH port")?,
+                user: c.ssh_user.trim().to_string(),
+                port: port_num(&c.ssh_port, "SSH port")?,
             })
         }
     }

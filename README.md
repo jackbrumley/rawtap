@@ -45,6 +45,18 @@ On Linux, serial ports belong to the `dialout` group (`uucp` on Arch): `sudo use
 
 Everything lives in one folder, on Linux and Windows alike: `~/.config/rawtap` (Windows: `%USERPROFILE%\.config\rawtap`). On first run RawTap creates a starter `settings.json` there. RawTap 0.6.0 kept `rawtap_config.json` and `rawtap_state.json` next to the exe; the first run of a newer version moves them here (as `settings.json` and `state.json`). Logs and captures written by 0.6.0 stay where they were.
 
+## Favourites
+
+Save any connection (serial port, TCP client or server, Telnet, SSH) with a name, and it's listed at the top of the start screen.
+
+- **Ctrl+S** on the start screen saves what's on the form. The name starts as what it connects to (`SSH admin@10.0.0.5:22`); type over it.
+- **F1 → Save as favourite…** in a session saves the connection you're in, set to open in the view you're using.
+- Each favourite has a **View**: **Last used** (the default: whichever view you used last) or a fixed **Terminal**, **Split** or **Hex**, so a switch can always open in the terminal.
+- On the start screen, **↑↓** onto a favourite fills the form with it; **Enter** connects, **F2** renames it or changes its view, **Del** removes it (after asking).
+- From the command line: `rawtap open "Core switch"` (any case).
+
+Favourites are kept in `state.json`. Passwords are never saved there.
+
 ## Screen
 
 ```
@@ -56,7 +68,7 @@ Everything lives in one folder, on Linux and Windows alike: `~/.config/rawtap` (
 ┌  LIVE KEYS  Enter sends CR ─────────────────────────────────────────────────────────────┐
 ```
 
-- **The view**: **Terminal** (the live terminal), **Hex** (the raw data in hex and text) or **Split** (both: side by side when the window is at least 130 columns wide, stacked otherwise). Switch with **F3** or click it in the footer (`View Terminal Split Hex`). RawTap remembers the last view you used and opens every connection in it.
+- **The view**: **Terminal** (the live terminal), **Hex** (the raw data in hex and text) or **Split** (both: side by side when the window is at least 130 columns wide, stacked otherwise). Switch with **F3** or click it in the footer (`View Terminal Split Hex`). RawTap remembers the last view you used and opens every connection in it, except a favourite with its own view.
   - **Ctrl+←/→** changes the terminal width; **Ctrl+↑/↓** changes the Hex strip height.
 - **Each connection remembers its own settings** (`serial:COM22`, `tcp:10.0.0.5:2101`...): hex format, line ending, HEX/ASCII, char delay and pane sizes. A switch and a scanner feed can each keep their own setup.
 - **The Hex pane groups bytes into one entry per line**, starting a new entry on a newline, a 30 ms gap, a change of direction, or every 1 KB. **F8** cycles the format: compact (one row each) → hex+text → hex → text.
@@ -157,6 +169,7 @@ rawtap tcp -H 192.168.1.50 -p 2101       connect out
 rawtap listen -p 9000 [--bind 0.0.0.0]   wait for a client
 rawtap telnet -H 192.168.1.1 [-p 23]     Telnet login to a switch or router
 rawtap ssh [user@]host [-p 22]           SSH login, through your system's ssh
+rawtap open "Core switch"                open a favourite by name
 rawtap serial -p /dev/ttyUSB0 -b 9600    (Linux)
 rawtap ports                             list serial ports
 rawtap update                            update to the latest release
@@ -192,8 +205,11 @@ Same settings as the Python version (`image_extraction` in the config), plus:
 | `src/ui_monitor.rs` | drawing the monitor: layouts and header |
 | `src/ui_monitor/panes.rs`, `src/ui_monitor/controls.rs` | drawing the raw log and terminal / the send box, footer, menu and help |
 | `src/app.rs`, `src/ui.rs` | start screen and app wiring |
+| `src/app/form.rs`, `src/app/setup.rs` | the start screen's keys and fields / its rows and connection settings |
+| `src/app/favourites.rs`, `src/ui/favourites.rs` | favourites: saving, editing, removing, `rawtap open` / their rows and dialog |
+| `src/app/connect.rs`, `src/app/update_prompt.rs` | connecting in the background / update checks and the Update Available dialog |
 | `src/extract.rs`, `src/logger.rs`, `src/config.rs` | image extraction, traffic log file, settings/state |
 | `src/paths.rs`, `src/json_store.rs` | where files live (and the move from 0.6.0's locations); atomic saves |
 | `src/session_log.rs`, `src/system_info.rs` | RawTap's own session log and panic hook; system info for bug reports |
 | `src/opener.rs`, `src/app/identity.rs` | opening files and folders; the app ID `info.brumley.rawtap` |
-| `src/switch_sim.rs` | end-to-end test against a fake switch |
+| `src/switch_sim.rs`, `src/screen_tests.rs` | end-to-end test against a fake switch / screens drawn in a test terminal |

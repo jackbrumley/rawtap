@@ -131,6 +131,7 @@ pub enum Action {
     NewConnection,
     CheckForUpdates,
     UpdateNow,
+    SaveFavourite,
 }
 
 // ---------------------------------------------------------------- monitor
@@ -141,6 +142,9 @@ pub struct Monitor {
     pub profile: Profile,
     /// The view this session shows (Terminal / Split / Hex).
     pub layout: Layout,
+    /// The user changed the view in this session: it becomes the "last used"
+    /// view. A favourite's fixed view isn't, unless the user picks it.
+    pub view_chosen: bool,
     /// Where the footer drew each view word, for clicks.
     pub footer_views: Vec<(Rect, Layout)>,
     pub link: Option<Link>,
@@ -232,6 +236,7 @@ impl Monitor {
             profile_key,
             profile,
             layout,
+            view_chosen: false,
             footer_views: Vec::new(),
             link: None,
             logger: None,
@@ -484,7 +489,7 @@ impl Monitor {
         }
     }
 
-    fn set_status(&mut self, msg: impl Into<String>, is_error: bool) {
+    pub(crate) fn set_status(&mut self, msg: impl Into<String>, is_error: bool) {
         self.status = Some((msg.into(), is_error, Instant::now()));
     }
 

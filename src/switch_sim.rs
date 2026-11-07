@@ -204,9 +204,12 @@ fn drive_a_switch() {
     let paths = crate::paths::Paths::at(dir.clone());
     let (cfg, notes) = config::load(&paths).unwrap();
     let saved = config::Saved {
-        mode: ConnMode::Tcp,
-        tcp_host: "127.0.0.1".into(),
-        tcp_port: port.to_string(),
+        connection: config::Connection {
+            mode: ConnMode::Tcp,
+            tcp_host: "127.0.0.1".into(),
+            tcp_port: port.to_string(),
+            ..Default::default()
+        },
         ..Default::default()
     };
     let mut app = App::new(cfg, paths, saved, notes, false);

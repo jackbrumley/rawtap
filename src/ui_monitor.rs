@@ -11,7 +11,7 @@ use crate::config::{Layout as PaneLayout, LogFormat};
 use crate::link::LinkSettings;
 use crate::menu::{self, Kind};
 use crate::monitor::{Entry, EntryKind, Monitor, Pane};
-use crate::ui::{DIM, centered, dim};
+use crate::ui::{DIM, centered, dim, truncate};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},

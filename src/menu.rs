@@ -27,6 +27,7 @@ pub enum Cmd {
     UpdateNow,
     Reconnect,
     NewConnection,
+    SaveFavourite,
     Quit,
 }
 
@@ -292,6 +293,16 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         "Ctrl+N",
         format!("Back to the start screen to pick a different port or host. Settings for {conn} are kept."),
         Cmd::NewConnection,
+    ));
+    v.push(cmd(
+        "SESSION",
+        "Save as favourite…",
+        "",
+        format!(
+            "Names {} and lists it at the top of the start screen, opening in this view.",
+            m.settings.describe()
+        ),
+        Cmd::SaveFavourite,
     ));
     v.push(cmd(
         "SESSION",

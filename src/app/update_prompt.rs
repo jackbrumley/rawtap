@@ -122,6 +122,9 @@ impl App {
     /// Nothing else is using the keyboard, so the dialog can't swallow keys
     /// meant for the device or another prompt.
     fn can_show_prompt(&self) -> bool {
+        if self.favourite_dialog.is_some() {
+            return false;
+        }
         match self.screen {
             Screen::Setup => true,
             Screen::Monitor => self.monitor.as_ref().is_some_and(|m| {

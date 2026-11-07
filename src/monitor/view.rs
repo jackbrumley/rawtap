@@ -41,6 +41,7 @@ impl Monitor {
 
     pub(super) fn set_layout(&mut self, l: Layout) {
         self.layout = l;
+        self.view_chosen = true;
         match l {
             Layout::Hex => {
                 self.focus = Pane::Log;

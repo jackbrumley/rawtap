@@ -10,7 +10,11 @@ the Release and Update Standard (see `AGENTS.md`).
 
 ## Next
 
-- Nothing queued.
+- **Passwords:** never in RawTap's own files. "Set up key login" for SSH
+  (ssh-keygen, then copy the key over); an opt-in "Remember password" in
+  the OS keyring (GNOME Keyring / KWallet, Windows Credential Manager), given
+  to ssh through SSH_ASKPASS and sent hidden at the first password prompt on
+  Telnet and serial; "Forget password". Not offered without a keyring.
 
 ## Ideas / Parking Lot
 

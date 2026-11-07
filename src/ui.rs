@@ -1,6 +1,8 @@
 //! Rendering: dispatch, and the setup screen. The monitor screen is in ui_monitor.rs.
 
-use crate::app::setup::Setup;
+mod favourites;
+
+use crate::app::setup::{Field, Row, Setup};
 use crate::app::update_prompt::UpdatePrompt;
 use crate::app::{App, Screen};
 use ratatui::{
@@ -21,6 +23,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 crate::ui_monitor::draw(f, m);
             }
         }
+    }
+    if let Some(dialog) = &app.favourite_dialog {
+        let over = match app.screen {
+            Screen::Setup => setup_layout(app, f.area()).area,
+            Screen::Monitor => f.area(),
+        };
+        favourites::draw_dialog(f, dialog, &app.saved, over);
     }
     if let Some(prompt) = &app.update_prompt {
         // Over the start screen's box (pinned near the top), so the dialog
@@ -165,8 +174,14 @@ struct SetupLayout {
 }
 
 fn setup_layout(app: &App, full: Rect) -> SetupLayout {
-    let fields = Setup::fields(app.saved.mode, app.setup.options_open);
-    let ports_rows = if app.saved.mode == crate::config::ConnMode::Serial {
+    let rows = Setup::rows(&app.saved, app.setup.options_open);
+    // The favourites' heading and the gap under them.
+    let favourite_rows = if app.saved.favourites.is_empty() {
+        0
+    } else {
+        2
+    };
+    let ports_rows = if app.saved.connection.mode == crate::config::ConnMode::Serial {
         app.setup.ports.len().max(1) + 2
     } else {
         0
@@ -192,7 +207,7 @@ fn setup_layout(app: &App, full: Rect) -> SetupLayout {
             error_rows.len() + 2
         }
         + 1;
-    let h = (fields.len() + ports_rows + notes_rows + 8 + 5) as u16;
+    let h = (rows.len() + favourite_rows + ports_rows + notes_rows + 8 + 5) as u16;
     let top = if full.height >= h + 2 { 1 } else { 0 };
     let area = Rect {
         x: full.x + (full.width - w) / 2,
@@ -208,7 +223,8 @@ fn setup_layout(app: &App, full: Rect) -> SetupLayout {
 }
 
 fn draw_setup(f: &mut Frame, app: &App) {
-    let fields = Setup::fields(app.saved.mode, app.setup.options_open);
+    let rows = Setup::rows(&app.saved, app.setup.options_open);
+    let focused_row = rows.get(app.setup.focus).copied();
     let SetupLayout {
         area,
         error_rows,
@@ -227,7 +243,14 @@ fn draw_setup(f: &mut Frame, app: &App) {
             Span::raw(" raw serial / TCP monitor "),
         ]))
         .title_bottom(Line::from(Span::styled(
-            " ↑↓ move  ←→ change  type to edit  Enter connect  F5 rescan  Ctrl+Q quit ",
+            match focused_row {
+                Some(Row::Favourite(_)) => {
+                    " ↑↓ move  Enter connect  F2 edit  Del remove  Ctrl+Q quit "
+                }
+                _ => {
+                    " ↑↓ move  ←→ change  Enter connect  Ctrl+S favourite  F5 rescan  Ctrl+Q quit "
+                }
+            },
             DIM,
         )))
         .border_style(Style::new().fg(Color::Cyan));
@@ -236,8 +259,21 @@ fn draw_setup(f: &mut Frame, app: &App) {
 
     let mut lines: Vec<Line> = vec![Line::from("")];
     let mut cursor = None;
-    for (i, fld) in fields.iter().enumerate() {
+    if !app.saved.favourites.is_empty() {
+        lines.push(Line::from(Span::styled("   Favourites", DIM)));
+    }
+    for (i, row) in rows.iter().enumerate() {
         let focused = i == app.setup.focus;
+        let fld = match row {
+            Row::Favourite(n) => {
+                lines.push(favourites::row(&app.saved, *n, focused, inner.width));
+                if n + 1 == app.saved.favourites.len() {
+                    lines.push(Line::from(""));
+                }
+                continue;
+            }
+            Row::Field(fld) => fld,
+        };
         let value = app.field_value(*fld);
         let label_style = if focused {
             Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD)
@@ -254,12 +290,8 @@ fn draw_setup(f: &mut Frame, app: &App) {
         } else {
             Style::new().fg(Color::White)
         };
-        let cyclable = !fld.is_text()
-            || matches!(
-                fld,
-                crate::app::setup::Field::SerialPort | crate::app::setup::Field::Baud
-            );
-        let cyclable = cyclable && *fld != crate::app::setup::Field::Options;
+        let cyclable = !fld.is_text() || matches!(fld, Field::SerialPort | Field::Baud);
+        let cyclable = cyclable && *fld != Field::Options;
         if focused && cyclable {
             spans.push(Span::styled("◀ ", DIM));
         }
@@ -272,7 +304,7 @@ fn draw_setup(f: &mut Frame, app: &App) {
                 inner.x + 3 + 14 + if cyclable { 2 } else { 0 } + 1 + value.chars().count() as u16;
             cursor = Some((x, inner.y + lines.len() as u16));
         }
-        if *fld == crate::app::setup::Field::SerialPort {
+        if *fld == Field::SerialPort {
             if let Some(p) = app
                 .setup
                 .ports
@@ -290,7 +322,7 @@ fn draw_setup(f: &mut Frame, app: &App) {
         lines.push(Line::from(spans));
     }
 
-    if app.saved.mode == crate::config::ConnMode::Serial {
+    if app.saved.connection.mode == crate::config::ConnMode::Serial {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
             "   Detected ports (refreshes every 2 s)",
@@ -311,16 +343,24 @@ fn draw_setup(f: &mut Frame, app: &App) {
     }
 
     // What the highlighted field does.
-    if let Some(fld) = fields.get(app.setup.focus) {
+    let description = match focused_row {
+        Some(Row::Favourite(n)) => Some(format!(
+            "Enter connects to {}. F2 renames it or changes its view; Del removes it.",
+            crate::app::favourites::describe(&app.saved.favourites[n].connection)
+        )),
+        Some(Row::Field(fld)) => Some(fld.description().to_string()),
+        None => None,
+    };
+    if let Some(description) = description {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
             format!("   {}", "─".repeat(inner.width.saturating_sub(6) as usize)),
             DIM,
         )));
         // Always two rows, so the box doesn't change height as the selection moves.
-        let mut rows = wrap_words(fld.description(), inner.width.saturating_sub(6) as usize);
-        rows.resize(2, String::new());
-        for r in rows.into_iter().take(2) {
+        let mut wrapped = wrap_words(&description, inner.width.saturating_sub(6) as usize);
+        wrapped.resize(2, String::new());
+        for r in wrapped.into_iter().take(2) {
             lines.push(Line::from(Span::styled(
                 format!("   {r}"),
                 Style::new().fg(Color::Gray),
@@ -364,6 +404,16 @@ fn draw_setup(f: &mut Frame, app: &App) {
     if let Some(c) = cursor {
         f.set_cursor_position(c);
     }
+}
+
+/// Cuts `s` to `max` characters, ending in "…" when it's cut.
+pub fn truncate(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(max.saturating_sub(1)).collect();
+    out.push('…');
+    out
 }
 
 /// Greedy word wrap.

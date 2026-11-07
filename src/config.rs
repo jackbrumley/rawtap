@@ -283,10 +283,12 @@ pub struct HistoryItem {
     pub text: String,
 }
 
-/// Everything remembered between runs.
-#[derive(Clone, Serialize, Deserialize)]
+/// One connection as the start screen fills it in: its type and every
+/// type's fields (each type keeps its own, so switching type loses nothing).
+/// A favourite saves one of these.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(default)]
-pub struct Saved {
+pub struct Connection {
     pub mode: ConnMode,
     pub serial_port: String,
     pub baud: String,
@@ -303,20 +305,11 @@ pub struct Saved {
     pub ssh_host: String,
     pub ssh_user: String,
     pub ssh_port: String,
-    pub logging: bool,
-    /// The view last used, for every connection without a fixed one.
-    pub view: Layout,
-    /// Session log level (F1 → Debug): error, warn, info, debug or trace.
-    pub log_level: String,
-    /// When the update check last finished (F1 → Updates, "Last checked").
-    pub last_update_check: Option<String>,
-    pub history: Vec<HistoryItem>,
-    pub profiles: BTreeMap<String, Profile>,
 }
 
-impl Default for Saved {
+impl Default for Connection {
     fn default() -> Self {
-        Saved {
+        Connection {
             mode: ConnMode::Serial,
             serial_port: String::new(),
             baud: "9600".into(),
@@ -333,12 +326,50 @@ impl Default for Saved {
             ssh_host: String::new(),
             ssh_user: String::new(),
             ssh_port: "22".into(),
+        }
+    }
+}
+
+/// A saved connection with a name, listed on the start screen.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct Favourite {
+    pub name: String,
+    pub connection: Connection,
+    /// `None`: open in the last view used; `Some`: always this view.
+    #[serde(default)]
+    pub view: Option<Layout>,
+}
+
+/// Everything remembered between runs.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Saved {
+    /// The start screen's connection (flattened: state.json keeps its shape).
+    #[serde(flatten)]
+    pub connection: Connection,
+    pub logging: bool,
+    /// The view last used, for every connection without a fixed one.
+    pub view: Layout,
+    /// Session log level (F1 → Debug): error, warn, info, debug or trace.
+    pub log_level: String,
+    /// When the update check last finished (F1 → Updates, "Last checked").
+    pub last_update_check: Option<String>,
+    pub history: Vec<HistoryItem>,
+    pub profiles: BTreeMap<String, Profile>,
+    pub favourites: Vec<Favourite>,
+}
+
+impl Default for Saved {
+    fn default() -> Self {
+        Saved {
+            connection: Connection::default(),
             logging: true,
             view: Layout::Split,
             log_level: crate::session_log::level_name(crate::session_log::DEFAULT_LEVEL).into(),
             last_update_check: None,
             history: Vec::new(),
             profiles: BTreeMap::new(),
+            favourites: Vec::new(),
         }
     }
 }

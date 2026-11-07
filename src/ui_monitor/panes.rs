@@ -45,15 +45,6 @@ pub(super) fn wrap_tokens(
         .collect()
 }
 
-pub(super) fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        return s.to_string();
-    }
-    let mut out: String = s.chars().take(max.saturating_sub(1)).collect();
-    out.push('…');
-    out
-}
-
 /// Screen rows for one entry at the given width.
 pub(crate) fn entry_lines(e: &Entry, width: u16, fmt: LogFormat) -> Vec<Line<'static>> {
     let w = width as usize;
