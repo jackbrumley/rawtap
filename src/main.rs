@@ -440,6 +440,36 @@ mod screen_tests {
     }
 
     #[test]
+    fn update_dialog_sits_over_the_start_screen_box_in_a_tall_window() {
+        let dir = std::env::temp_dir().join(format!("rawtap_tall_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let paths = paths::Paths::at(dir.clone());
+        let (cfg, _) = config::load(&paths).unwrap();
+        let saved = config::Saved {
+            mode: ConnMode::Tcp,
+            ..Default::default()
+        };
+        let mut app = App::new(cfg, paths, saved, Vec::new(), true);
+        app.update_prompt = Some(app::update_prompt::UpdatePrompt::new(update::UpdateCheck {
+            current_version: "0.7.2".into(),
+            latest_version: "0.7.3".into(),
+            update_available: true,
+            release_url: "https://github.com/jackbrumley/rawtap/releases/tag/v0.7.3".into(),
+        }));
+        let mut t = Terminal::new(TestBackend::new(120, 70)).unwrap();
+        t.draw(|f| ui::draw(f, &mut app)).unwrap();
+        let screen = screen_text(&t);
+        let row_of = |text: &str| screen.lines().position(|l| l.contains(text)).unwrap();
+        let box_bottom = row_of("Esc quit");
+        let dialog_top = row_of("Update Available");
+        assert!(
+            dialog_top < box_bottom,
+            "dialog (row {dialog_top}) should sit over the start screen box (bottom row {box_bottom})"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn long_start_screen_notes_wrap_with_their_indent() {
         let dir = std::env::temp_dir().join(format!("rawtap_notes_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

@@ -22,7 +22,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         }
     }
     if let Some(prompt) = &app.update_prompt {
-        draw_update_prompt(f, prompt);
+        // Over the start screen's box (pinned near the top), so the dialog
+        // sits on what it's about; the monitor fills the window.
+        let over = match app.screen {
+            Screen::Setup => setup_layout(app, f.area()).area,
+            Screen::Monitor => f.area(),
+        };
+        draw_update_prompt(f, prompt, over);
     }
 }
 
@@ -39,7 +45,7 @@ pub fn dim(f: &mut Frame) {
 }
 
 /// The "Update Available" dialog, worded as in Voquill.
-fn draw_update_prompt(f: &mut Frame, prompt: &UpdatePrompt) {
+fn draw_update_prompt(f: &mut Frame, prompt: &UpdatePrompt, over: Rect) {
     dim(f);
     let check = &prompt.check;
     let available = check.update_available;
@@ -109,7 +115,17 @@ fn draw_update_prompt(f: &mut Frame, prompt: &UpdatePrompt) {
     lines.push(Line::from(""));
 
     let h = (lines.len() as u16 + 2).min(full.height);
-    let area = centered(full, w, h);
+    // Centred on `over` at full size (never squeezed into a smaller box),
+    // then kept on screen.
+    let x = (over.x + over.width.saturating_sub(w) / 2).min(full.x + full.width.saturating_sub(w));
+    let y =
+        (over.y + over.height.saturating_sub(h) / 2).min(full.y + full.height.saturating_sub(h));
+    let area = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
     f.render_widget(Clear, area);
     let block = Block::bordered()
         .title(Line::from(Span::styled(
@@ -140,7 +156,14 @@ pub fn centered(area: Rect, w: u16, h: u16) -> Rect {
 
 // ---------------------------------------------------------------- setup
 
-fn draw_setup(f: &mut Frame, app: &App) {
+/// Where the start screen's box goes, and its wrapped notes and errors.
+struct SetupLayout {
+    area: Rect,
+    error_rows: Vec<String>,
+    note_rows: Vec<String>,
+}
+
+fn setup_layout(app: &App, full: Rect) -> SetupLayout {
     let fields = Setup::fields(app.saved.mode, app.setup.options_open);
     let ports_rows = if app.saved.mode == crate::config::ConnMode::Serial {
         app.setup.ports.len().max(1) + 2
@@ -149,7 +172,6 @@ fn draw_setup(f: &mut Frame, app: &App) {
     };
     // Centred horizontally but pinned near the top, so the box doesn't jump when the
     // number of fields changes between Serial / TCP / Listen.
-    let full = f.area();
     let w = 80.min(full.width);
     // Notes and errors are wrapped here, indented on every row: the inner
     // width less the borders and the three-space indent.
@@ -177,6 +199,20 @@ fn draw_setup(f: &mut Frame, app: &App) {
         width: w,
         height: h.min(full.height - top),
     };
+    SetupLayout {
+        area,
+        error_rows,
+        note_rows,
+    }
+}
+
+fn draw_setup(f: &mut Frame, app: &App) {
+    let fields = Setup::fields(app.saved.mode, app.setup.options_open);
+    let SetupLayout {
+        area,
+        error_rows,
+        note_rows,
+    } = setup_layout(app, f.area());
     f.render_widget(Clear, area);
     let block = Block::bordered()
         .title(Line::from(vec![
