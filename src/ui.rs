@@ -1,7 +1,8 @@
 //! Rendering: dispatch, and the setup screen. The monitor screen is in ui_monitor.rs.
 
+use crate::app::setup::Setup;
 use crate::app::update_prompt::UpdatePrompt;
-use crate::app::{App, Screen, Setup};
+use crate::app::{App, Screen};
 use ratatui::{
     Frame,
     layout::Rect,
@@ -254,8 +255,11 @@ fn draw_setup(f: &mut Frame, app: &App) {
             Style::new().fg(Color::White)
         };
         let cyclable = !fld.is_text()
-            || matches!(fld, crate::app::Field::SerialPort | crate::app::Field::Baud);
-        let cyclable = cyclable && *fld != crate::app::Field::Options;
+            || matches!(
+                fld,
+                crate::app::setup::Field::SerialPort | crate::app::setup::Field::Baud
+            );
+        let cyclable = cyclable && *fld != crate::app::setup::Field::Options;
         if focused && cyclable {
             spans.push(Span::styled("◀ ", DIM));
         }
@@ -268,7 +272,7 @@ fn draw_setup(f: &mut Frame, app: &App) {
                 inner.x + 3 + 14 + if cyclable { 2 } else { 0 } + 1 + value.chars().count() as u16;
             cursor = Some((x, inner.y + lines.len() as u16));
         }
-        if *fld == crate::app::Field::SerialPort {
+        if *fld == crate::app::setup::Field::SerialPort {
             if let Some(p) = app
                 .setup
                 .ports

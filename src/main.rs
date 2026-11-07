@@ -310,7 +310,7 @@ fn main() {
     }
 
     if let Some(Cmd::Ports) = cli.cmd {
-        let ports = app::scan_ports();
+        let ports = app::setup::scan_ports();
         if ports.is_empty() {
             println!("No serial ports found.");
         }
