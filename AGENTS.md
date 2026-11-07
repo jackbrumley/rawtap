@@ -146,7 +146,9 @@ saying why.
 - `.github/workflows/release.yml`: builds, verifies and install-tests
   releases; `docs/RELEASE.md` is the procedure.
 - `docs/`: served by GitHub Pages at `https://brumley.info/rawtap/`: the
-  install page (`index.html`, `assets/`), the one-line installers
+  install page (`index.html`, which loads the shared style, install widget
+  and "Other apps" footer from `https://brumley.info/shared/v1/`, App
+  Standard "Install Page"; `assets/icon.png`), the one-line installers
   (`install.sh`, `uninstall.sh`, `install.ps1`, `install-system.ps1`,
   `uninstall.ps1`), `RELEASE.md` and `TODO.md`. Promotion to `main` deploys
   them.
