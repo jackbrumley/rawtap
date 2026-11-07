@@ -13,7 +13,9 @@ mod opener;
 mod paths;
 #[cfg(test)]
 mod screen_tests;
+mod secrets;
 mod session_log;
+mod ssh_key;
 #[cfg(test)]
 mod switch_sim;
 mod system_info;
@@ -279,6 +281,7 @@ fn start(cli: &Cli) -> Result<(App, bool), String> {
     let migrations = paths::migrate_legacy_files(&paths);
     session_log::init(&paths.debug_dir(), session_log::DEFAULT_LEVEL)?;
     log::info!("Config folder: {}", paths.base.display());
+    secrets::init();
 
     let mut notes = Vec::new();
     for migration in &migrations {

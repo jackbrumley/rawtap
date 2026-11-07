@@ -244,12 +244,8 @@ fn draw_setup(f: &mut Frame, app: &App) {
         ]))
         .title_bottom(Line::from(Span::styled(
             match focused_row {
-                Some(Row::Favourite(_)) => {
-                    " ↑↓ move  Enter connect  F2 edit  Del remove  Ctrl+Q quit "
-                }
-                _ => {
-                    " ↑↓ move  ←→ change  Enter connect  Ctrl+S favourite  F5 rescan  Ctrl+Q quit "
-                }
+                Some(Row::Favourite(_)) => " ↑↓ move  Ctrl+Q quit ",
+                _ => " ↑↓ move  ←→ change  F5 rescan  Ctrl+Q quit ",
             },
             DIM,
         )))
@@ -344,10 +340,7 @@ fn draw_setup(f: &mut Frame, app: &App) {
 
     // What the highlighted field does.
     let description = match focused_row {
-        Some(Row::Favourite(n)) => Some(format!(
-            "Enter connects to {}. F2 renames it or changes its view; Del removes it.",
-            crate::app::favourites::describe(&app.saved.favourites[n].connection)
-        )),
+        Some(Row::Favourite(_)) => Some("Its connection and options are shown below.".into()),
         Some(Row::Field(fld)) => Some(fld.description().to_string()),
         None => None,
     };
@@ -382,11 +375,21 @@ fn draw_setup(f: &mut Frame, app: &App) {
             Span::styled("   Esc cancels", DIM),
         ]));
     } else {
-        lines.push(Line::from(vec![
-            Span::raw("   Press "),
-            Span::styled(" Enter ", Style::new().fg(Color::Black).bg(Color::Green)),
-            Span::raw(" to connect"),
-        ]));
+        // The actions for the highlighted row, said once, here.
+        let actions: &[(&str, &str)] = match focused_row {
+            Some(Row::Favourite(_)) => &[("Enter", "connect"), ("F2", "rename"), ("Del", "remove")],
+            _ => &[("Enter", "connect"), ("Ctrl+S", "save as favourite")],
+        };
+        let mut spans = vec![Span::raw("  ")];
+        for (key, what) in actions {
+            spans.push(Span::raw(" "));
+            spans.push(Span::styled(
+                format!(" {key} "),
+                Style::new().fg(Color::Black).bg(Color::Green),
+            ));
+            spans.push(Span::raw(format!(" {what}  ")));
+        }
+        lines.push(Line::from(spans));
     }
     if !error_rows.is_empty() {
         lines.push(Line::from(""));

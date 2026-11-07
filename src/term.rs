@@ -126,6 +126,12 @@ impl Term {
     pub fn at_password_prompt(&self) -> bool {
         asks_for_secret(&self.text_before_cursor())
     }
+
+    /// True at a login's password prompt (not a key passphrase or a PIN):
+    /// where a remembered password goes.
+    pub fn at_login_password_prompt(&self) -> bool {
+        asks_for_login_password(&self.text_before_cursor())
+    }
 }
 
 /// Bytes to send for a keystroke in live-keys mode (xterm/PuTTY conventions).
@@ -338,6 +344,13 @@ pub fn asks_for_secret(prompt: &str) -> bool {
         && ["password", "passcode", "passphrase", "secret", "pin"]
             .iter()
             .any(|w| t.contains(w))
+}
+
+/// A login asking for its password: "Password:", "admin@host's password:",
+/// "Passcode:". Not a key's passphrase, a PIN or a secret.
+pub fn asks_for_login_password(prompt: &str) -> bool {
+    let t = prompt.trim_end().to_lowercase();
+    t.ends_with(':') && (t.contains("password") || t.contains("passcode"))
 }
 
 /// Plain-text copy of everything the device printed, next to the hex log.

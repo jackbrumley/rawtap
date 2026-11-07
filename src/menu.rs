@@ -28,6 +28,9 @@ pub enum Cmd {
     Reconnect,
     NewConnection,
     SaveFavourite,
+    RememberPassword,
+    ForgetPassword,
+    SetUpKeyLogin,
     Quit,
 }
 
@@ -82,7 +85,7 @@ pub fn send_mode_desc() -> &'static str {
     "How the send box reads what you type. ASCII: text, plus \\r \\n \\xHH and <STX>-style tokens. HEX: bytes like 02 41 03, sent exactly."
 }
 pub fn layout_desc() -> &'static str {
-    "Terminal shows just the live terminal; Hex just the raw data (hex and text); Split both, side by side when the window is wide. RawTap remembers the last one you used, for every connection. Also F3, or click the switch in the footer."
+    "Terminal shows just the live terminal; Hex just the raw data (hex and text); Split both, side by side when the window is wide. Also F3, or click the switch in the footer. RawTap opens each connection in the view you used last, unless its start screen Options give it its own."
 }
 
 fn setting(
@@ -137,6 +140,40 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         "Type something without it being shown, logged or kept in history, then Enter sends it with the line ending. Use it for passwords.".into(),
         Cmd::HiddenSend,
     ));
+    match m.password_stored() {
+        Some(false) => v.push(cmd(
+            "SEND",
+            "Remember password…",
+            "",
+            format!(
+                "Keeps a password for {} in {} (never in RawTap's files). RawTap then sends it, hidden, at the first password prompt of each connection.",
+                m.settings.describe(),
+                crate::secrets::store_name()
+            ),
+            Cmd::RememberPassword,
+        )),
+        Some(true) => v.push(cmd(
+            "SEND",
+            "Forget password",
+            "",
+            format!(
+                "Removes the password remembered for {} from {}.",
+                m.settings.describe(),
+                crate::secrets::store_name()
+            ),
+            Cmd::ForgetPassword,
+        )),
+        None => {}
+    }
+    if matches!(m.settings, crate::link::LinkSettings::Ssh { .. }) {
+        v.push(cmd(
+            "SEND",
+            "Set up key login",
+            "",
+            "Once you're logged in to a Linux or Unix server: adds your SSH key to ~/.ssh/authorized_keys there (making a key first if you have none), so the next login needs no password.".into(),
+            Cmd::SetUpKeyLogin,
+        ));
+    }
     v.push(cmd(
         "SEND",
         if serial { "Send break" } else { "Send break (serial only)" },
@@ -299,7 +336,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         "Save as favourite…",
         "",
         format!(
-            "Names {} and lists it at the top of the start screen, opening in this view.",
+            "Names {} and lists it at the top of the start screen.",
             m.settings.describe()
         ),
         Cmd::SaveFavourite,

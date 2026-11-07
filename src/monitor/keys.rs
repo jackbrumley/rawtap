@@ -7,7 +7,16 @@ impl Monitor {
     /// Run a command from a shortcut key or the menu.
     pub fn run_cmd(&mut self, c: Cmd) -> Action {
         match c {
-            Cmd::HiddenSend => self.secret = Some(Vec::new()),
+            Cmd::HiddenSend => {
+                self.secret = Some(Vec::new());
+                self.secret_use = super::password::SecretUse::Send;
+            }
+            Cmd::RememberPassword => {
+                self.secret = Some(Vec::new());
+                self.secret_use = super::password::SecretUse::Remember;
+            }
+            Cmd::ForgetPassword => self.forget_password(),
+            Cmd::SetUpKeyLogin => self.set_up_key_login(),
             Cmd::Break => match self.link.as_ref().map(|l| l.send_break(BREAK_LEN)) {
                 Some(Ok(())) => self.push(EntryKind::Info(format!(
                     "Sent break ({} ms)",
@@ -306,7 +315,11 @@ impl Monitor {
                 KeyCode::Enter => self.submit_secret(),
                 KeyCode::Esc => {
                     self.secret = None;
-                    self.set_status("Hidden send cancelled", false);
+                    let what = match std::mem::take(&mut self.secret_use) {
+                        super::password::SecretUse::Send => "Hidden send cancelled",
+                        super::password::SecretUse::Remember => "Nothing remembered",
+                    };
+                    self.set_status(what, false);
                 }
                 KeyCode::Backspace => {
                     secret.pop();

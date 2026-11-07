@@ -30,15 +30,11 @@ pub(super) fn row(saved: &Saved, i: usize, focused: bool, width: u16) -> Line<'s
         Span::styled(format!(" {name:<NAME_WIDTH$} "), name_style),
         Span::raw("  "),
     ];
-    let view = f.view.map(|v| format!("  {} view", v.label()));
-    let room = (width as usize)
-        .saturating_sub(3 + NAME_WIDTH + 2 + 2 + view.as_ref().map_or(0, |v| v.len()));
-    spans.push(Span::styled(
-        truncate(&favourites::describe(&f.connection), room),
-        DIM,
-    ));
-    if let Some(view) = view {
-        spans.push(Span::styled(view, Style::new().fg(Color::Gray)));
+    // What it connects to, unless the name already says it.
+    let target = favourites::describe(&f.connection);
+    if !target.eq_ignore_ascii_case(f.name.trim()) {
+        let room = (width as usize).saturating_sub(3 + NAME_WIDTH + 2 + 2);
+        spans.push(Span::styled(truncate(&target, room), DIM));
     }
     Line::from(spans)
 }
@@ -56,12 +52,7 @@ pub(super) fn draw_dialog(f: &mut Frame, dialog: &FavouriteDialog, saved: &Saved
                 " Save as favourite "
             };
             let (lines, cursor) = edit_lines(form, text_width);
-            (
-                title,
-                " ↑↓ move  ←→ change  Enter save  Esc cancel ",
-                lines,
-                cursor,
-            )
+            (title, " Enter save  Esc cancel ", lines, cursor)
         }
         FavouriteDialog::Remove(i) => {
             let Some(fav) = saved.favourites.get(*i) else {
@@ -114,16 +105,11 @@ pub(super) fn draw_dialog(f: &mut Frame, dialog: &FavouriteDialog, saved: &Saved
     }
 }
 
-/// The edit dialog's rows, and where the cursor goes (inside the border)
-/// when the name has the focus.
+/// The edit dialog's rows, and where the cursor goes (inside the border).
 fn edit_lines(form: &FavouriteForm, text_width: usize) -> (Vec<Line<'static>>, Option<(u16, u16)>) {
-    let focus_label = Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD);
-    let focus_value = Style::new().fg(Color::Black).bg(Color::Cyan);
-    let plain_value = Style::new().fg(Color::White).bg(Color::DarkGray);
     let mut lines = vec![Line::from("")];
-
     let name_row = lines.len() as u16;
-    let name_room = text_width.saturating_sub(10);
+    let name_room = text_width.saturating_sub(7);
     // The end of a long name, so what's being typed stays in sight.
     let shown: String = {
         let count = form.name.chars().count();
@@ -133,59 +119,17 @@ fn edit_lines(form: &FavouriteForm, text_width: usize) -> (Vec<Line<'static>>, O
             .collect()
     };
     lines.push(Line::from(vec![
-        Span::styled(if form.on_name { " ▶ " } else { "   " }, focus_label),
         Span::styled(
-            "Name   ",
-            if form.on_name {
-                focus_label
-            } else {
-                Style::new()
-            },
+            "  Name ",
+            Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         ),
         Span::styled(
             format!(" {shown:<name_room$} "),
-            if form.on_name {
-                focus_value
-            } else {
-                plain_value
-            },
+            Style::new().fg(Color::Black).bg(Color::Cyan),
         ),
     ]));
-    let mut view = vec![
-        Span::styled(if form.on_name { "   " } else { " ▶ " }, focus_label),
-        Span::styled(
-            "View   ",
-            if form.on_name {
-                Style::new()
-            } else {
-                focus_label
-            },
-        ),
-    ];
-    if !form.on_name {
-        view.push(Span::styled("◀ ", DIM));
-    }
-    view.push(Span::styled(
-        format!(" {} ", favourites::view_label(form.view)),
-        if form.on_name {
-            plain_value
-        } else {
-            focus_value
-        },
-    ));
-    if !form.on_name {
-        view.push(Span::styled(" ▶", DIM));
-    }
-    lines.push(Line::from(view));
     lines.push(Line::from(""));
-    for r in wrap_words(
-        &format!(
-            "{} {}",
-            favourites::describe(&form.connection),
-            favourites::view_description(form.view)
-        ),
-        text_width,
-    ) {
+    for r in wrap_words(&favourites::describe(&form.connection), text_width) {
         lines.push(Line::from(Span::styled(format!("  {r}"), DIM)));
     }
     if let Some(error) = &form.error {
@@ -198,8 +142,6 @@ fn edit_lines(form: &FavouriteForm, text_width: usize) -> (Vec<Line<'static>>, O
         }
     }
     lines.push(Line::from(""));
-    let cursor = form
-        .on_name
-        .then(|| (3 + 7 + 1 + shown.chars().count() as u16, name_row));
+    let cursor = Some((7 + 1 + shown.chars().count() as u16, name_row));
     (lines, cursor)
 }

@@ -244,7 +244,7 @@ impl LogFormat {
 }
 
 /// Send and display preferences remembered per connection (e.g.
-/// "serial:COM22"). The view itself is one setting for all (`Saved::view`).
+/// "serial:COM22"), set on the start screen's Options or the F1 menu.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Profile {
@@ -261,6 +261,9 @@ pub struct Profile {
     /// Delay between characters when sending (Ctrl+T). Some device consoles garble
     /// input that arrives faster than a person types.
     pub char_delay_ms: u64,
+    /// The view this connection opens in: `None` is "Last used"
+    /// (`Saved::view`, shared by every connection).
+    pub view: Option<Layout>,
 }
 
 impl Default for Profile {
@@ -273,6 +276,7 @@ impl Default for Profile {
             term_cols: 0,
             log_rows: 0,
             char_delay_ms: 0,
+            view: None,
         }
     }
 }
@@ -330,14 +334,27 @@ impl Default for Connection {
     }
 }
 
-/// A saved connection with a name, listed on the start screen.
+/// A saved connection with a name, listed on the start screen. Its view and
+/// other options are the connection's own (`Profile`).
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Favourite {
     pub name: String,
     pub connection: Connection,
-    /// `None`: open in the last view used; `Some`: always this view.
-    #[serde(default)]
-    pub view: Option<Layout>,
+}
+
+/// A connection's view choices on the start screen, in ←→ order.
+pub const VIEW_CHOICES: [Option<Layout>; 4] = [
+    None,
+    Some(Layout::Terminal),
+    Some(Layout::Split),
+    Some(Layout::Hex),
+];
+
+pub fn view_choice_label(view: Option<Layout>) -> &'static str {
+    match view {
+        None => "Last used",
+        Some(layout) => layout.label(),
+    }
 }
 
 /// Everything remembered between runs.

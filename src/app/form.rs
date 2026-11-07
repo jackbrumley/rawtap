@@ -112,8 +112,7 @@ impl App {
             Field::Logging => s.logging = !s.logging,
             Field::Options => self.setup.options_open = !self.setup.options_open,
             // The view is one setting for every connection, not per profile.
-            Field::OptLayout => s.view = crate::menu::step(&crate::config::VIEWS, s.view, dir),
-            Field::OptLineEnding | Field::OptCharDelay | Field::OptSendMode => {
+            Field::OptLineEnding | Field::OptCharDelay | Field::OptSendMode | Field::OptLayout => {
                 use crate::codec::LineEnding as L;
                 let key = connection_profile_key(&s.connection);
                 let p = s.profiles.entry(key).or_default();
@@ -125,6 +124,9 @@ impl App {
                     Field::OptCharDelay => {
                         p.char_delay_ms =
                             crate::menu::step(&crate::menu::CHAR_DELAYS, p.char_delay_ms, dir)
+                    }
+                    Field::OptLayout => {
+                        p.view = crate::menu::step(&crate::config::VIEW_CHOICES, p.view, dir)
                     }
                     _ => {
                         p.input_mode =
@@ -142,6 +144,12 @@ impl App {
             | Field::SshUser
             | Field::SshPort => {}
         }
+    }
+
+    /// The view a new session opens in: the connection's own, or the last
+    /// one used.
+    pub(crate) fn view_for_connection(&self) -> crate::config::Layout {
+        self.form_profile().view.unwrap_or(self.saved.view)
     }
 
     /// The remembered profile for what's typed in the form (defaults if none yet).
@@ -195,7 +203,7 @@ impl App {
                     "{arrow} {} · {delay} · {} · {}",
                     p.line_ending.label(),
                     p.input_mode.label(),
-                    self.saved.view.label()
+                    crate::config::view_choice_label(p.view)
                 )
             }
             Field::OptLineEnding => self.form_profile().line_ending.label().into(),
@@ -204,7 +212,7 @@ impl App {
                 ms => format!("{ms} ms"),
             },
             Field::OptSendMode => self.form_profile().input_mode.label().into(),
-            Field::OptLayout => self.saved.view.label().into(),
+            Field::OptLayout => crate::config::view_choice_label(self.form_profile().view).into(),
         }
     }
 }

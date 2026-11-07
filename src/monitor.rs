@@ -2,6 +2,7 @@
 //! mouse, copy and paste are in `view`; commands, menu and keys are in `keys`.
 
 mod keys;
+pub(crate) mod password;
 mod view;
 
 use crate::codec;
@@ -175,6 +176,10 @@ pub struct Monitor {
     silent_since: Option<Instant>,
     /// Hidden (password) send in progress.
     pub secret: Option<Vec<char>>,
+    /// Whether the hidden box sends or remembers.
+    pub secret_use: password::SecretUse,
+    /// This connection's remembered password (OS keyring).
+    remembered: password::Remembered,
 
     pub macros: Vec<LoadedMacro>,
     pub run: Option<MacroRun>,
@@ -256,6 +261,8 @@ impl Monitor {
             draft: Vec::new(),
             silent_since: None,
             secret: None,
+            secret_use: password::SecretUse::Send,
+            remembered: password::Remembered::default(),
             macros,
             run: None,
             capture_dir,
@@ -322,6 +329,7 @@ impl Monitor {
             });
         self.logger = logger;
         self.connected = true;
+        self.load_password();
         self.peer = None;
         let msg = match &self.settings {
             LinkSettings::TcpListen { .. } => {
@@ -523,6 +531,7 @@ impl Monitor {
     /// Called every frame.
     pub fn tick(&mut self) {
         self.autoscroll();
+        self.poll_password();
         if self
             .silent_since
             .is_some_and(|t| t.elapsed() >= SSH_SILENCE_NOTE)
@@ -754,6 +763,9 @@ impl Monitor {
         let Some(chars) = self.secret.take() else {
             return;
         };
+        if std::mem::take(&mut self.secret_use) == password::SecretUse::Remember {
+            return self.remember_password(chars.into_iter().collect());
+        }
         let mut bytes: Vec<u8> = chars.iter().collect::<String>().into_bytes();
         bytes.extend_from_slice(self.profile.line_ending.bytes());
         if bytes.is_empty() {

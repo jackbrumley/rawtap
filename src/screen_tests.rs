@@ -63,16 +63,11 @@ fn favourites_save_list_fill_the_form_edit_and_remove() {
         key(&mut app, KeyCode::Backspace);
     }
     typ(&mut app, "Core switch");
-    key(&mut app, KeyCode::Down);
-    key(&mut app, KeyCode::Right); // Last used -> Terminal
     t.draw(|f| ui::draw(f, &mut app)).unwrap();
     dump(&t, "save as favourite");
-    assert!(screen_text(&t).contains("Always opens in the Terminal view."));
     key(&mut app, KeyCode::Enter);
     assert!(app.favourite_dialog.is_none());
     assert_eq!(app.saved.favourites[0].name, "Core switch");
-    assert_eq!(app.saved.favourites[0].view, Some(config::Layout::Terminal));
-    assert_eq!(app.view_for_connection(), config::Layout::Terminal);
 
     // A second one: the same connection again says which favourite it is.
     app.on_event(Event::Key(ctrl_s));
@@ -102,7 +97,6 @@ fn favourites_save_list_fill_the_form_edit_and_remove() {
     assert!(text.contains("Favourites"));
     assert!(text.contains("Core switch"));
     assert!(text.contains("SSH admin@10.0.0.5:22"));
-    assert!(text.contains("Terminal view"));
 
     // Moving onto a favourite fills the form.
     key(&mut app, KeyCode::Up);
@@ -325,7 +319,7 @@ fn the_view_switch_is_clickable_and_follows_you() {
     let mut app = connect(app.saved.view);
     assert_eq!(app.monitor.as_ref().unwrap().layout, config::Layout::Hex);
 
-    // F1 → "Save as favourite…" takes the session's view as the fixed one.
+    // F1 → "Save as favourite…" saves the session's connection.
     let action = app
         .monitor
         .as_mut()
@@ -334,16 +328,29 @@ fn the_view_switch_is_clickable_and_follows_you() {
     assert!(matches!(action, monitor::Action::SaveFavourite));
     app.save_session_as_favourite();
     key(&mut app, KeyCode::Enter);
-    assert_eq!(app.saved.favourites[0].view, Some(config::Layout::Hex));
+    assert_eq!(app.saved.favourites.len(), 1);
     app.shutdown().unwrap();
 
-    // A fixed view opens whatever was used last, and doesn't become
-    // "last used" unless the user changes it.
+    // The start screen's Options give a connection its own view, which
+    // opens whatever was used last and doesn't become "last used" unless
+    // the user changes it.
     let mut saved = app.saved.clone();
     saved.view = config::Layout::Split;
     let paths = paths::Paths::at(dir.clone());
     let (cfg, _) = config::load(&paths).unwrap();
     let mut app = App::new(cfg, paths, saved, Vec::new(), true);
+    app.setup.options_open = true;
+    app.setup.focus = app::setup::Setup::rows(&app.saved, true)
+        .iter()
+        .position(|r| *r == app::setup::Row::Field(app::setup::Field::OptLayout))
+        .unwrap();
+    for _ in 0..3 {
+        key(&mut app, KeyCode::Right); // Last used -> Terminal -> Split -> Hex
+    }
+    assert_eq!(app.field_value(app::setup::Field::OptLayout), "Hex");
+    let mut t = Terminal::new(TestBackend::new(100, 34)).unwrap();
+    t.draw(|f| ui::draw(f, &mut app)).unwrap();
+    dump(&t, "a connection's own view");
     app.request_connect();
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     while app.monitor.is_none() && std::time::Instant::now() < deadline {
@@ -454,5 +461,138 @@ fn walkthrough() {
         "===== state\n{}",
         std::fs::read_to_string(dir.join(paths::STATE_FILE)).unwrap()
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A device that asks for a username, then a password, then (as if the
+/// password were wrong) a password again. Returns everything it received.
+fn login_device() -> (u16, std::sync::mpsc::Receiver<Vec<u8>>) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let (mut s, _) = listener.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_millis(1500)))
+            .unwrap();
+        let mut got = Vec::new();
+        let read_line = |s: &mut std::net::TcpStream, got: &mut Vec<u8>| {
+            let mut b = [0u8; 1];
+            while let Ok(1) = s.read(&mut b) {
+                got.push(b[0]);
+                if b[0] == b'\r' {
+                    return;
+                }
+            }
+        };
+        // A session that closes early just ends the conversation.
+        for prompt in [
+            &b"Username: "[..],
+            b"\r\nPassword: ",
+            b"\r\n% Login invalid\r\nPassword: ",
+        ] {
+            if s.write_all(prompt).is_err() {
+                break;
+            }
+            read_line(&mut s, &mut got);
+        }
+        let _ = tx.send(got);
+    });
+    (port, rx)
+}
+
+fn pump(app: &mut App, ms: u64) {
+    let end = std::time::Instant::now() + Duration::from_millis(ms);
+    while std::time::Instant::now() < end {
+        app.tick();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn a_remembered_password_is_sent_once_at_the_first_prompt_and_never_logged() {
+    secrets::use_test_store();
+    let (port, received) = login_device();
+    let account = format!("tcp:127.0.0.1:{port}");
+    secrets::remember(&account, "s3cret-pw").unwrap();
+
+    let dir = std::env::temp_dir().join(format!("rawtap_pw_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let paths = paths::Paths::at(dir.clone());
+    let (cfg, _) = config::load(&paths).unwrap();
+    let saved = config::Saved {
+        connection: config::Connection {
+            mode: ConnMode::Tcp,
+            tcp_host: "127.0.0.1".into(),
+            tcp_port: port.to_string(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut app = App::new(cfg, paths, saved, Vec::new(), false);
+    app.request_connect();
+    pump(&mut app, 400);
+    assert!(app.monitor.is_some(), "{:?}", app.setup.error);
+    assert_eq!(app.monitor.as_ref().unwrap().password_stored(), Some(true));
+    typ(&mut app, "admin");
+    key(&mut app, KeyCode::Enter);
+    pump(&mut app, 600);
+    // The second Password: prompt is the user's: nothing more is sent.
+    let got = received.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert_eq!(String::from_utf8_lossy(&got), "admin\rs3cret-pw\r");
+
+    let m = app.monitor.as_ref().unwrap();
+    let logged: Vec<u8> = m
+        .entries
+        .iter()
+        .flat_map(|e| match &e.kind {
+            monitor::EntryKind::Tx(d) | monitor::EntryKind::Rx(d) => d.clone(),
+            _ => Vec::new(),
+        })
+        .collect();
+    assert!(!String::from_utf8_lossy(&logged).contains("s3cret"));
+    assert!(
+        m.entries
+            .iter()
+            .any(|e| matches!(e.kind, monitor::EntryKind::TxHidden(10)))
+    );
+    app.shutdown().unwrap();
+    for file in std::fs::read_dir(dir.join("logs")).unwrap() {
+        let text = std::fs::read_to_string(file.unwrap().path()).unwrap();
+        assert!(!text.contains("s3cret"), "{text}");
+    }
+
+    // Forget, then Remember through the hidden box.
+    let mut app = App::new(
+        config::load(&paths::Paths::at(dir.clone())).unwrap().0,
+        paths::Paths::at(dir.clone()),
+        app.saved.clone(),
+        Vec::new(),
+        true,
+    );
+    let (port2, _received) = login_device();
+    app.saved.connection.tcp_port = port2.to_string();
+    app.request_connect();
+    pump(&mut app, 300);
+    let m = app.monitor.as_mut().unwrap();
+    assert_eq!(m.password_stored(), Some(false));
+    m.run_cmd(menu::Cmd::RememberPassword);
+    typ(&mut app, "n3w-pw");
+    let mut t = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    t.draw(|f| ui::draw(f, &mut app)).unwrap();
+    assert!(screen_text(&t).contains("REMEMBER PASSWORD"));
+    assert!(!screen_text(&t).contains("n3w-pw"));
+    key(&mut app, KeyCode::Enter);
+    pump(&mut app, 200);
+    let account2 = format!("tcp:127.0.0.1:{port2}");
+    assert_eq!(secrets::read(&account2).unwrap().as_deref(), Some("n3w-pw"));
+    assert_eq!(app.monitor.as_ref().unwrap().password_stored(), Some(true));
+    app.monitor
+        .as_mut()
+        .unwrap()
+        .run_cmd(menu::Cmd::ForgetPassword);
+    pump(&mut app, 200);
+    assert_eq!(secrets::read(&account2).unwrap(), None);
+    app.shutdown().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }

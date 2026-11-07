@@ -50,12 +50,19 @@ Everything lives in one folder, on Linux and Windows alike: `~/.config/rawtap` (
 Save any connection (serial port, TCP client or server, Telnet, SSH) with a name, and it's listed at the top of the start screen.
 
 - **Ctrl+S** on the start screen saves what's on the form. The name starts as what it connects to (`SSH admin@10.0.0.5:22`); type over it.
-- **F1 → Save as favourite…** in a session saves the connection you're in, set to open in the view you're using.
-- Each favourite has a **View**: **Last used** (the default: whichever view you used last) or a fixed **Terminal**, **Split** or **Hex**, so a switch can always open in the terminal.
-- On the start screen, **↑↓** onto a favourite fills the form with it; **Enter** connects, **F2** renames it or changes its view, **Del** removes it (after asking).
+- **F1 → Save as favourite…** in a session saves the connection you're in.
+- On the start screen, **↑↓** onto a favourite fills the form with it and its options; **Enter** connects, **F2** renames it, **Del** removes it (after asking).
+- A favourite opens in its connection's view (Options ▸ View, below), so a switch can always open in the terminal.
 - From the command line: `rawtap open "Core switch"` (any case).
 
 Favourites are kept in `state.json`. Passwords are never saved there.
+
+## Passwords
+
+RawTap never writes a password to its own files. Two ways to stop typing one:
+
+- **SSH key login** (best for servers): log in once, then **F1 → Set up key login**. RawTap makes an SSH key if you have none (`~/.ssh/id_ed25519`, no passphrase; add one any time with `ssh-keygen -p`) and types a command into the server's shell that adds it to `~/.ssh/authorized_keys`. From then on ssh logs in with the key. For Linux and other Unix servers.
+- **Remember password** (any connection, e.g. a switch's Telnet or console login): **F1 → Remember password…**, type it (hidden), Enter. It's kept in your operating system's keyring: GNOME Keyring or KWallet on Linux, Windows Credential Manager on Windows. RawTap sends it, hidden, at the first password prompt of each connection; if it's wrong, the next prompt is yours, and **F1 → Forget password** removes it. Only offered when a keyring is available (the session log says why when it isn't).
 
 ## Screen
 
@@ -68,7 +75,7 @@ Favourites are kept in `state.json`. Passwords are never saved there.
 ┌  LIVE KEYS  Enter sends CR ─────────────────────────────────────────────────────────────┐
 ```
 
-- **The view**: **Terminal** (the live terminal), **Hex** (the raw data in hex and text) or **Split** (both: side by side when the window is at least 130 columns wide, stacked otherwise). Switch with **F3** or click it in the footer (`View Terminal Split Hex`). RawTap remembers the last view you used and opens every connection in it, except a favourite with its own view.
+- **The view**: **Terminal** (the live terminal), **Hex** (the raw data in hex and text) or **Split** (both: side by side when the window is at least 130 columns wide, stacked otherwise). Switch with **F3** or click it in the footer (`View Terminal Split Hex`). RawTap remembers the last view you used and opens every connection in it, unless the start screen's Options ▸ View gives that connection its own (Terminal, Split or Hex).
   - **Ctrl+←/→** changes the terminal width; **Ctrl+↑/↓** changes the Hex strip height.
 - **Each connection remembers its own settings** (`serial:COM22`, `tcp:10.0.0.5:2101`...): hex format, line ending, HEX/ASCII, char delay and pane sizes. A switch and a scanner feed can each keep their own setup.
 - **The Hex pane groups bytes into one entry per line**, starting a new entry on a newline, a 30 ms gap, a change of direction, or every 1 KB. **F8** cycles the format: compact (one row each) → hex+text → hex → text.
@@ -98,7 +105,7 @@ The **Debug** section at the bottom has what a bug report needs: *Copy log* (Raw
 
 A short description of the highlighted item is shown at the bottom. On screen, the footer shows only F1 Menu, F4 Live keys, Ctrl+N New connection and Ctrl+Q Quit.
 
-The start screen has an **Options ▸** row (←→ or Enter to open it). It shows the remembered line ending, char delay and send mode for the selected port or host, and the view, so you can set them before connecting. These are the same settings the F1 menu changes.
+The start screen has an **Options ▸** row (←→ or Enter to open it). It shows the line ending, char delay, send mode and view remembered for the selected port or host, so you can set them before connecting. The view is **Last used** (whichever you used last) or always **Terminal**, **Split** or **Hex** for that connection. The line under the form lists what Enter and the other keys do for the highlighted row.
 
 ## Mouse, copy and paste
 

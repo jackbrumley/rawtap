@@ -119,7 +119,9 @@ impl Field {
             Field::OptLineEnding => crate::menu::line_ending_desc(),
             Field::OptCharDelay => crate::menu::char_delay_desc(),
             Field::OptSendMode => crate::menu::send_mode_desc(),
-            Field::OptLayout => crate::menu::layout_desc(),
+            Field::OptLayout => {
+                "The view this connection opens in: Last used (whichever you used last), or always Terminal, Split or Hex."
+            }
         }
     }
     /// Text fields accept typing; the rest are cycled with ←/→.

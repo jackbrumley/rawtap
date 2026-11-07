@@ -146,10 +146,14 @@ saying why.
   and the settings and profile key a connection makes; `src/app/form.rs`:
   the start screen's keys and field values; `src/app/update_prompt.rs`:
   update checks and the Update Available dialog.
-- `src/app/favourites.rs`: favourites (named connections in `state.json`,
-  each with a "Last used" or fixed view): Ctrl+S, F2, Del, F1 → Save as
-  favourite, `rawtap open`; `src/ui/favourites.rs` draws their rows and
-  dialog.
+- `src/app/favourites.rs`: favourites (named connections in `state.json`;
+  the view and other options stay the connection's own profile): Ctrl+S,
+  F2, Del, F1 → Save as favourite, `rawtap open`; `src/ui/favourites.rs`
+  draws their rows and dialog.
+- `src/secrets.rs`: remembered passwords, only in the OS keyring
+  (keyring-core: Secret Service on Linux, Credential Manager on Windows);
+  `src/monitor/password.rs` sends one at a connection's first login
+  password prompt and runs F1 → Set up key login (`src/ssh_key.rs`).
 - `src/term.rs`: terminal emulation (vt100), live keys, transcript.
 - `src/codec.rs`, `src/macros.rs`, `src/menu.rs`, `src/clip.rs`,
   `src/extract.rs`, `src/logger.rs`, `src/config.rs`: hex/text codec,

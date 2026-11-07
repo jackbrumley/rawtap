@@ -37,6 +37,13 @@ pub fn user_local_bin() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".local").join("bin"))
 }
 
+/// `~/.ssh`, where ssh looks for its keys (Windows: `%USERPROFILE%\\.ssh`).
+pub fn ssh_dir() -> Result<PathBuf, String> {
+    Ok(dirs::home_dir()
+        .ok_or("Could not resolve the home directory")?
+        .join(".ssh"))
+}
+
 /// Where RawTap keeps its files. Relative folders in `settings.json` (logs,
 /// captures, extracted images) are resolved against `base`.
 pub struct Paths {

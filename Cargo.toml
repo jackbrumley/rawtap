@@ -12,6 +12,7 @@ arboard = { version = "3", default-features = false, features = ["wayland-data-c
 chrono = "0.4"
 clap = { version = "4.5", features = ["derive"] }
 dirs = "6"
+keyring-core = "1.0.1"
 log = "0.4"
 portable-pty = "0.9.0"
 ratatui = "0.30"
@@ -29,3 +30,9 @@ strip = true
 
 [build-dependencies]
 winresource = "0.1.34"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus-secret-service-keyring-store = { version = "1.0.1", features = ["crypto-rust"] }
+
+[target."cfg(windows)".dependencies]
+windows-native-keyring-store = "1.1.0"

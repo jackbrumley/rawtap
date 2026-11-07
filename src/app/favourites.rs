@@ -1,37 +1,13 @@
 //! Favourites: named connections listed at the top of the start screen.
 //!
-//! A favourite keeps any kind of connection and a view: "Last used" (the
-//! view the user last picked) or a fixed Terminal / Split / Hex. They're
-//! saved with Ctrl+S on the start screen or F1 → "Save as favourite…" in a
+//! A favourite keeps any kind of connection; its view and other options are
+//! the connection's own (the start screen's Options). They're saved with Ctrl+S on the start screen or F1 → "Save as favourite…" in a
 //! session, edited with F2, removed with Del, and opened from the command
 //! line with `rawtap open "<name>"`. They live in state.json.
 
 use super::{App, Screen};
-use crate::config::{Connection, Favourite, Layout, Saved};
-use crate::menu::step;
+use crate::config::{Connection, Favourite, Saved};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-
-/// The view choices, in ←→ order.
-pub const VIEW_CHOICES: [Option<Layout>; 4] = [
-    None,
-    Some(Layout::Terminal),
-    Some(Layout::Split),
-    Some(Layout::Hex),
-];
-
-pub fn view_label(view: Option<Layout>) -> &'static str {
-    match view {
-        None => "Last used",
-        Some(layout) => layout.label(),
-    }
-}
-
-pub fn view_description(view: Option<Layout>) -> String {
-    match view {
-        None => "Opens in the view you used last.".into(),
-        Some(layout) => format!("Always opens in the {} view.", layout.label()),
-    }
-}
 
 /// What a favourite connects to, e.g. "SSH admin@10.0.0.5:22".
 pub fn describe(connection: &Connection) -> String {
@@ -52,9 +28,6 @@ pub struct FavouriteForm {
     pub index: Option<usize>,
     pub connection: Connection,
     pub name: String,
-    pub view: Option<Layout>,
-    /// The name has the focus (else the view).
-    pub on_name: bool,
     pub error: Option<String>,
 }
 
@@ -106,27 +79,22 @@ impl App {
             self.setup.error = Some(format!("Can't save this as a favourite yet: {error}"));
             return;
         }
-        let view = None;
-        self.open_favourite_form(connection, view);
+        self.open_favourite_form(connection);
     }
 
-    /// F1 → "Save as favourite…": the session's connection, in the view
-    /// it's showing.
+    /// F1 → "Save as favourite…": the session's connection.
     pub(crate) fn save_session_as_favourite(&mut self) {
-        let view = self.monitor.as_ref().map(|m| m.layout);
-        self.open_favourite_form(self.saved.connection.clone(), view);
+        self.open_favourite_form(self.saved.connection.clone());
     }
 
-    fn open_favourite_form(&mut self, connection: Connection, view: Option<Layout>) {
+    fn open_favourite_form(&mut self, connection: Connection) {
         let form = match find(&self.saved, &connection) {
             Some(i) => {
                 let existing = &self.saved.favourites[i];
                 FavouriteForm {
                     index: Some(i),
                     name: existing.name.clone(),
-                    view: view.or(existing.view),
                     connection,
-                    on_name: true,
                     error: Some(format!(
                         "This connection is already saved as \"{}\".",
                         existing.name
@@ -136,9 +104,7 @@ impl App {
             None => FavouriteForm {
                 index: None,
                 name: describe(&connection),
-                view,
                 connection,
-                on_name: true,
                 error: None,
             },
         };
@@ -154,8 +120,6 @@ impl App {
             index: Some(i),
             connection: f.connection.clone(),
             name: f.name.clone(),
-            view: f.view,
-            on_name: true,
             error: None,
         })));
     }
@@ -185,17 +149,10 @@ impl App {
             FavouriteDialog::Edit(form) => match k.code {
                 KeyCode::Esc => self.favourite_dialog = None,
                 KeyCode::Enter => self.save_favourite_form(),
-                KeyCode::Up | KeyCode::Down => form.on_name = !form.on_name,
-                KeyCode::Left | KeyCode::Right if !form.on_name => {
-                    let dir = if k.code == KeyCode::Left { -1 } else { 1 };
-                    form.view = step(&VIEW_CHOICES, form.view, dir);
-                }
-                KeyCode::Backspace if form.on_name => {
+                KeyCode::Backspace => {
                     form.name.pop();
                 }
-                KeyCode::Char(c)
-                    if form.on_name && (!ctrl || k.modifiers.contains(KeyModifiers::ALT)) =>
-                {
+                KeyCode::Char(c) if !ctrl || k.modifiers.contains(KeyModifiers::ALT) => {
                     form.name.push(c);
                 }
                 _ => {}
@@ -205,9 +162,7 @@ impl App {
 
     /// A paste while the dialog is open goes into the name.
     pub(super) fn favourite_dialog_paste(&mut self, text: &str) {
-        if let Some(FavouriteDialog::Edit(form)) = self.favourite_dialog.as_mut()
-            && form.on_name
-        {
+        if let Some(FavouriteDialog::Edit(form)) = self.favourite_dialog.as_mut() {
             form.name.push_str(text.lines().next().unwrap_or("").trim());
         }
     }
@@ -231,7 +186,6 @@ impl App {
         let saved = Favourite {
             name: name.clone(),
             connection: form.connection.clone(),
-            view: form.view,
         };
         let index = match form.index {
             Some(i) => {
@@ -267,14 +221,6 @@ impl App {
         self.store_state_reporting();
     }
 
-    /// The view a new session opens in: the favourite's fixed view, or the
-    /// last one used.
-    pub(crate) fn view_for_connection(&self) -> Layout {
-        find(&self.saved, &self.saved.connection)
-            .and_then(|i| self.saved.favourites[i].view)
-            .unwrap_or(self.saved.view)
-    }
-
     /// Where the start screen's highlight starts: on the favourite that
     /// matches the last connection, else the form's first field.
     pub(super) fn home_focus(&mut self) {
@@ -286,7 +232,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::ConnMode;
+    use crate::config::{ConnMode, Layout};
 
     fn ssh(host: &str) -> Connection {
         Connection {
@@ -302,7 +248,6 @@ mod tests {
             favourites: vec![Favourite {
                 name: "Core switch".into(),
                 connection: ssh("10.0.0.5"),
-                view: Some(Layout::Terminal),
             }],
             ..Default::default()
         };

@@ -19,19 +19,32 @@ pub(super) fn draw_input(f: &mut Frame, m: &Monitor, area: Rect) {
     // (title, right-hand title, text, placeholder when empty, cursor column)
     let (title, right, body, placeholder, cursor): (Line, Line, String, &str, Option<usize>) =
         if let Some(s) = &m.secret {
+            let remember = m.secret_use == crate::monitor::password::SecretUse::Remember;
+            let (badge_text, right, placeholder) = if remember {
+                (
+                    " REMEMBER PASSWORD ".to_string(),
+                    format!(
+                        " kept in {} · Enter saves · Esc cancels ",
+                        crate::secrets::store_name()
+                    ),
+                    "Type the password to remember and press Enter",
+                )
+            } else {
+                (
+                    format!(" HIDDEN SEND + {le} "),
+                    " not logged · Enter sends · Esc cancels ".to_string(),
+                    "Type the password and press Enter",
+                )
+            };
             (
                 Line::from(vec![
                     Span::raw(" "),
-                    badge(format!(" HIDDEN SEND + {le} "), Color::Red),
+                    badge(badge_text, Color::Red),
                     Span::raw(" "),
                 ]),
-                Line::from(Span::styled(
-                    " not logged · Enter sends · Esc cancels ",
-                    DIM,
-                ))
-                .right_aligned(),
+                Line::from(Span::styled(right, DIM)).right_aligned(),
                 "•".repeat(s.len()),
-                "Type the password and press Enter",
+                placeholder,
                 Some(s.len()),
             )
         } else if m.live {
