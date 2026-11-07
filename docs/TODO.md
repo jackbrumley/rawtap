@@ -5,16 +5,13 @@ the Release and Update Standard (see `AGENTS.md`).
 
 ## Now
 
-- **Hand-test v0.7.0** (released 2026-11-07): every install mode on Linux
-  and Windows, then the in-app update to the next release (v0.7.1, which
-  carries the Windows clippy fix).
+- **Hand-test the installs and the update:** every install mode on Linux
+  and Windows, and the in-app update from v0.7.0 to v0.7.1 (Ctrl+U).
 
 ## Next
 
-- **Windows exe icon and version info:** embed `rawtap.ico` and the version
-  in `rawtap.exe` itself (shortcuts already use `rawtap.ico`).
-- **RawTap tile in the other apps' "Other apps" footers** (Voquill, Rusty G6,
-  SomeDrive, Yambuck install pages).
+- Nothing queued.
+
 
 ## Ideas / Parking Lot
 

@@ -106,6 +106,8 @@ saying why.
 
 ## Project Layout
 
+- `build.rs`: on Windows targets only, embeds `packaging/icons/rawtap.ico`
+  and the version resource in `rawtap.exe` (winresource).
 - `src/main.rs`: panic hook, command line (clap), start-up (`start`: the
   move from 0.6.0's locations, the session log, state and settings), the
   TUI loop.
