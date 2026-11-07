@@ -1,7 +1,8 @@
 //! Connections: serial port, TCP client, TCP server (one client at a time),
-//! Telnet. A background thread reads and posts events; sends go through a
-//! shared writer.
+//! Telnet, SSH (the system's ssh in a pseudo-terminal). A background thread
+//! reads and posts events; sends go through a shared writer.
 
+mod pty;
 mod telnet;
 
 use serialport::{DataBits, FlowControl, Parity, StopBits};
@@ -19,6 +20,8 @@ pub enum LinkEvent {
     Data(Vec<u8>),
     /// The connection is gone for good (serial error, peer closed TCP client socket).
     Closed(String),
+    /// The session ended normally (e.g. you logged out of SSH).
+    Ended(String),
     PeerConnected(String),
     PeerDisconnected(String),
     /// A queued send failed (sends happen on a background thread).
@@ -50,6 +53,12 @@ pub enum LinkSettings {
         host: String,
         port: u16,
     },
+    Ssh {
+        host: String,
+        /// Empty: ssh's own default (your login name or ~/.ssh/config).
+        user: String,
+        port: u16,
+    },
 }
 
 impl LinkSettings {
@@ -59,6 +68,7 @@ impl LinkSettings {
             LinkSettings::TcpClient { .. } => "tcp",
             LinkSettings::TcpListen { .. } => "listen",
             LinkSettings::Telnet { .. } => "telnet",
+            LinkSettings::Ssh { .. } => "ssh",
         }
     }
 
@@ -97,6 +107,10 @@ impl LinkSettings {
             LinkSettings::TcpClient { host, port } => format!("TCP {host}:{port}"),
             LinkSettings::TcpListen { bind, port } => format!("TCP server {bind}:{port}"),
             LinkSettings::Telnet { host, port } => format!("Telnet {host}:{port}"),
+            LinkSettings::Ssh { host, user, port } => match user.as_str() {
+                "" => format!("SSH {host}:{port}"),
+                user => format!("SSH {user}@{host}:{port}"),
+            },
         }
     }
 }
@@ -104,6 +118,8 @@ impl LinkSettings {
 enum Writer {
     Serial(Box<dyn serialport::SerialPort>),
     Tcp(TcpStream),
+    /// A program's input in a pseudo-terminal (SSH).
+    Pty(Box<dyn Write + Send>),
 }
 
 impl Write for Writer {
@@ -111,12 +127,14 @@ impl Write for Writer {
         match self {
             Writer::Serial(p) => p.write(buf),
             Writer::Tcp(s) => s.write(buf),
+            Writer::Pty(w) => w.write(buf),
         }
     }
     fn flush(&mut self) -> std::io::Result<()> {
         match self {
             Writer::Serial(p) => p.flush(),
             Writer::Tcp(s) => s.flush(),
+            Writer::Pty(w) => w.flush(),
         }
     }
 }
@@ -134,6 +152,8 @@ pub struct Link {
     pacing_ms: Arc<AtomicU64>,
     /// The Telnet session, on a Telnet connection.
     telnet: Option<Arc<Mutex<telnet::Telnet>>>,
+    /// The pseudo-terminal, on an SSH connection.
+    pty: Option<pty::PtySession>,
 }
 
 impl Link {
@@ -142,6 +162,7 @@ impl Link {
         let writer: SharedWriter = Arc::new(Mutex::new(None));
         let err_tx = tx.clone();
         let mut telnet_session = None;
+        let mut pty_session = None;
         let handle = match settings {
             LinkSettings::Serial {
                 port,
@@ -230,6 +251,17 @@ impl Link {
                 let (stop2, writer2) = (stop.clone(), writer.clone());
                 thread::spawn(move || telnet_read_loop(reader, session, writer2, stop2, tx))
             }
+            LinkSettings::Ssh { host, user, port } => {
+                let mut args = vec!["-p".to_string(), port.to_string()];
+                if !user.is_empty() {
+                    args.extend(["-l".to_string(), user.clone()]);
+                }
+                args.push(host.clone());
+                let spawned = pty::spawn("ssh", &args, tx)?;
+                *writer.lock().unwrap() = Some(Writer::Pty(spawned.input));
+                pty_session = Some(spawned.session);
+                spawned.waiter
+            }
             LinkSettings::TcpListen { bind, port } => {
                 let listener = TcpListener::bind((bind.as_str(), *port))
                     .map_err(|e| listen_error(bind, *port, &e))?;
@@ -257,6 +289,7 @@ impl Link {
             out_handle: Some(out_handle),
             pacing_ms,
             telnet: telnet_session,
+            pty: pty_session,
         })
     }
 
@@ -293,14 +326,20 @@ impl Link {
                 p.clear_break().map_err(|e| e.to_string())
             }
             Some(w @ Writer::Tcp(_)) if self.telnet.is_some() => write_all(w, &telnet::BREAK),
-            Some(Writer::Tcp(_)) => Err("break only works on a serial port or Telnet".into()),
+            Some(Writer::Tcp(_) | Writer::Pty(_)) => {
+                Err("break only works on a serial port or Telnet".into())
+            }
             None => Err("not connected".into()),
         }
     }
 
-    /// The terminal pane is now `cols`×`rows`. Telnet reports it to the device
-    /// when the device asked (NAWS); other connections have no window size.
+    /// The terminal pane is now `cols`×`rows`. SSH resizes its pseudo-terminal
+    /// (ssh passes it on); Telnet reports it when the device asked (NAWS);
+    /// serial and raw TCP have no window size.
     pub fn resize(&self, cols: u16, rows: u16) -> Result<(), String> {
+        if let Some(pty) = &self.pty {
+            return pty.resize(cols, rows);
+        }
         let Some(session) = &self.telnet else {
             return Ok(());
         };
@@ -324,6 +363,10 @@ impl Drop for Link {
         }
         if let Ok(mut w) = self.writer.lock() {
             *w = None;
+        }
+        // The SSH waiter thread ends once ssh has.
+        if let Some(pty) = self.pty.as_mut() {
+            pty.kill();
         }
         if let Some(h) = self.handle.take() {
             let _ = h.join();

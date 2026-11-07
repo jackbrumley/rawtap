@@ -401,8 +401,9 @@ pub(super) fn draw_help(f: &mut Frame) {
             "  rawtap serial -p COM3 -b 9600  ·  rawtap tcp -H 10.0.0.5 -p 2101  ·  rawtap listen -p 9000",
         ),
         l(
-            "  rawtap telnet -H 10.0.0.1  ·  rawtap ports  (list serial ports)  ·  --no-log  skip log files",
+            "  rawtap telnet -H 10.0.0.1  ·  rawtap ssh admin@10.0.0.1  ·  rawtap ports  (list serial ports)",
         ),
+        l("  --no-log  skip log files"),
         l(""),
         Line::from(Span::styled("  Any key closes this.", DIM)),
     ];

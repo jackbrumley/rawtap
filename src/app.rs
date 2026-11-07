@@ -274,6 +274,10 @@ impl App {
             extractor,
             capture_dir,
         );
+        // ssh asks its own questions (host keys, passwords): keys go straight to it.
+        if matches!(settings, LinkSettings::Ssh { .. }) {
+            m.run_cmd(crate::menu::Cmd::ToggleLive);
+        }
         if !self.no_log {
             m.log_dir = Some(
                 self.paths
@@ -456,6 +460,9 @@ impl App {
             Field::ListenPort => &mut s.listen_port,
             Field::TelnetHost => &mut s.telnet_host,
             Field::TelnetPort => &mut s.telnet_port,
+            Field::SshHost => &mut s.ssh_host,
+            Field::SshUser => &mut s.ssh_user,
+            Field::SshPort => &mut s.ssh_port,
             _ => return None,
         })
     }
@@ -506,7 +513,10 @@ impl App {
             | Field::Bind
             | Field::ListenPort
             | Field::TelnetHost
-            | Field::TelnetPort => {}
+            | Field::TelnetPort
+            | Field::SshHost
+            | Field::SshUser
+            | Field::SshPort => {}
         }
     }
 
@@ -535,6 +545,9 @@ impl App {
             Field::ListenPort => s.listen_port.clone(),
             Field::TelnetHost => s.telnet_host.clone(),
             Field::TelnetPort => s.telnet_port.clone(),
+            Field::SshHost => s.ssh_host.clone(),
+            Field::SshUser => s.ssh_user.clone(),
+            Field::SshPort => s.ssh_port.clone(),
             Field::Logging => {
                 if s.logging {
                     "Yes".into()

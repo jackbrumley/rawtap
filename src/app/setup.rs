@@ -30,6 +30,9 @@ pub enum Field {
     ListenPort,
     TelnetHost,
     TelnetPort,
+    SshHost,
+    SshUser,
+    SshPort,
     Logging,
     Options,
     OptLineEnding,
@@ -54,6 +57,9 @@ impl Field {
             Field::ListenPort => "TCP port",
             Field::TelnetHost => "Host / IP",
             Field::TelnetPort => "Telnet port",
+            Field::SshHost => "Host / IP",
+            Field::SshUser => "User",
+            Field::SshPort => "SSH port",
             Field::Logging => "Log to file",
             Field::Options => "Options",
             Field::OptLineEnding => "  Line ending",
@@ -67,7 +73,7 @@ impl Field {
     pub fn description(self) -> &'static str {
         match self {
             Field::Mode => {
-                "Serial: a serial port (USB adapter or console cable). TCP client: raw TCP out to an IP and port. TCP server: wait for a device to connect to this computer. Telnet: a switch or router's Telnet login."
+                "Serial: a serial port (USB adapter or console cable). TCP client: raw TCP out to an IP and port. TCP server: wait for a device to connect to this computer. Telnet: a switch or router's Telnet login. SSH: an SSH login, through your system's ssh."
             }
             Field::SerialPort => {
                 "The serial port to open. ←→ cycles through the ports detected on this computer, or type a name such as COM3 (Windows) or /dev/ttyUSB0 (Linux)."
@@ -97,6 +103,13 @@ impl Field {
             Field::TelnetPort => {
                 "Usually 23. RawTap answers the Telnet negotiation, reports its window size and says it's an XTERM."
             }
+            Field::SshHost => {
+                "Host name, IP address, or a Host alias from ~/.ssh/config. RawTap runs your system's ssh, so your keys, agent and known_hosts work as usual."
+            }
+            Field::SshUser => {
+                "The login name. Leave it empty for ssh's default (your user name, or User in ~/.ssh/config)."
+            }
+            Field::SshPort => "Usually 22.",
             Field::Logging => {
                 "Write a hex log and a plain-text transcript of the session to the logs folder."
             }
@@ -121,6 +134,9 @@ impl Field {
                 | Field::ListenPort
                 | Field::TelnetHost
                 | Field::TelnetPort
+                | Field::SshHost
+                | Field::SshUser
+                | Field::SshPort
         )
     }
 }
@@ -154,6 +170,7 @@ impl Setup {
             ConnMode::Tcp => f.extend([Field::Host, Field::TcpPort]),
             ConnMode::Listen => f.extend([Field::Bind, Field::ListenPort]),
             ConnMode::Telnet => f.extend([Field::TelnetHost, Field::TelnetPort]),
+            ConnMode::Ssh => f.extend([Field::SshHost, Field::SshUser, Field::SshPort]),
         }
         f.push(Field::Logging);
         f.push(Field::Options);
@@ -230,6 +247,12 @@ pub fn form_profile_key(s: &Saved) -> String {
         ConnMode::Tcp => format!("tcp:{}:{}", s.tcp_host.trim(), port(&s.tcp_port)),
         ConnMode::Listen => format!("listen:{}", port(&s.listen_port)),
         ConnMode::Telnet => format!("telnet:{}:{}", s.telnet_host.trim(), port(&s.telnet_port)),
+        ConnMode::Ssh => format!(
+            "ssh:{}@{}:{}",
+            s.ssh_user.trim(),
+            s.ssh_host.trim(),
+            port(&s.ssh_port)
+        ),
     }
 }
 
@@ -240,6 +263,7 @@ pub fn profile_key(s: &LinkSettings) -> String {
         LinkSettings::TcpClient { host, port } => format!("tcp:{host}:{port}"),
         LinkSettings::TcpListen { port, .. } => format!("listen:{port}"),
         LinkSettings::Telnet { host, port } => format!("telnet:{host}:{port}"),
+        LinkSettings::Ssh { host, user, port } => format!("ssh:{user}@{host}:{port}"),
     }
 }
 
@@ -328,6 +352,17 @@ pub fn settings_from_saved(s: &Saved) -> Result<LinkSettings, String> {
             Ok(LinkSettings::Telnet {
                 host,
                 port: port_num(&s.telnet_port, "Telnet port")?,
+            })
+        }
+        ConnMode::Ssh => {
+            let host = s.ssh_host.trim().to_string();
+            if host.is_empty() {
+                return Err("Enter a host name, IP address or ~/.ssh/config alias.".into());
+            }
+            Ok(LinkSettings::Ssh {
+                host,
+                user: s.ssh_user.trim().to_string(),
+                port: port_num(&s.ssh_port, "SSH port")?,
             })
         }
     }

@@ -372,6 +372,14 @@ impl Monitor {
         Some(message)
     }
 
+    /// The device is asking for a password: what's typed or pasted now is
+    /// logged as `<hidden>`. Checked on the screen's cursor row and on the
+    /// device's current unfinished line, which doesn't depend on the pane's
+    /// width, so a long prompt wrapped in a narrow pane still counts.
+    pub fn at_password_prompt(&self) -> bool {
+        self.term.at_password_prompt() || term::asks_for_secret(&self.plain.partial())
+    }
+
     /// The terminal pane is drawn at this size: resize the emulator and tell the
     /// connection (Telnet reports it to the device).
     pub fn resize_terminal(&mut self, rows: u16, cols: u16) {
@@ -558,6 +566,8 @@ impl Monitor {
     }
 
     pub fn on_link_event(&mut self, ev: LinkEvent) {
+        // A normal end (logged out) is a note; anything else is an error.
+        let normal_end = matches!(ev, LinkEvent::Ended(_));
         match ev {
             LinkEvent::Data(d) => {
                 self.rx_bytes += d.len() as u64;
@@ -599,14 +609,20 @@ impl Monitor {
                     }
                 }
             }
-            LinkEvent::Closed(m) => {
+            LinkEvent::Closed(m) | LinkEvent::Ended(m) => {
                 self.flush_pending();
                 self.link = None;
                 self.connected = false;
                 self.peer = None;
                 self.live = false;
                 self.run = None;
-                self.push(EntryKind::Error(m));
+                if normal_end {
+                    log::info!("{m}");
+                    self.push(EntryKind::Info(m));
+                } else {
+                    log::warn!("{m}");
+                    self.push(EntryKind::Error(m));
+                }
                 self.push(EntryKind::Info(
                     "Ctrl+R reconnects, Ctrl+N picks a new connection.".into(),
                 ));
@@ -663,7 +679,7 @@ impl Monitor {
         };
         self.term.scroll_to(0);
         self.selection = None;
-        let hidden = self.term.at_password_prompt();
+        let hidden = self.at_password_prompt();
         match link.send(&data) {
             Ok(()) => {
                 self.tx_bytes += data.len() as u64;

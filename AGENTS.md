@@ -81,8 +81,11 @@ saying why.
   (`src/link.rs`); the draw loop never blocks.
 - **Raw terminal mode:** anything that can exit or panic must leave the
   terminal restored.
-- **Passwords:** hidden sends and anything typed at a `Password:` prompt are
-  never logged, kept in history or written to a capture.
+- **Passwords:** hidden sends and anything typed or pasted at a password
+  prompt are never logged, kept in history or written to a capture. The
+  prompt check (`Monitor::at_password_prompt`) looks at the cursor's screen
+  row and at the device's current line, so a prompt wrapped in a narrow pane
+  still counts.
 - **Platforms:** RawTap ships for Linux and Windows. Port names, file
   openers and error messages must work on both (`/dev/ttyUSB0` and `COM3`).
 - **Paths:** only `src/paths.rs` calls `dirs::`. Everything lives in
@@ -130,9 +133,12 @@ saying why.
 - `src/ui_monitor.rs`: drawing the monitor; `src/ui_monitor/panes.rs` (raw
   log and terminal) and `src/ui_monitor/controls.rs` (send box, footer, menu,
   help).
-- `src/link.rs`: serial, TCP client, TCP server and Telnet, each with a
-  reader thread; `src/link/telnet.rs` is the Telnet protocol (negotiation,
-  window size, break), with no network code.
+- `src/link.rs`: serial, TCP client, TCP server, Telnet and SSH, each with
+  a reader thread; `src/link/telnet.rs` is the Telnet protocol
+  (negotiation, window size, break), with no network code;
+  `src/link/pty.rs` runs a program (the system's `ssh`) in a
+  pseudo-terminal with `portable-pty`. RawTap never handles SSH
+  credentials: OpenSSH does.
 - `src/app/setup.rs`: the start screen's fields and the settings and
   profile key they make; `src/app/update_prompt.rs`: update checks and the
   Update Available dialog.

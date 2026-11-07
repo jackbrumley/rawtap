@@ -124,11 +124,7 @@ impl Term {
     /// True when the device looks like it's asking for a password, so live keystrokes are
     /// kept out of the log.
     pub fn at_password_prompt(&self) -> bool {
-        let t = self.text_before_cursor().trim_end().to_lowercase();
-        t.ends_with(':')
-            && ["password", "passcode", "passphrase", "secret", "pin"]
-                .iter()
-                .any(|w| t.contains(w))
+        asks_for_secret(&self.text_before_cursor())
     }
 }
 
@@ -334,6 +330,16 @@ impl TextCleaner {
     }
 }
 
+/// True when a prompt line asks for a password or another secret, e.g.
+/// "Password:" or "admin@switch's password: ".
+pub fn asks_for_secret(prompt: &str) -> bool {
+    let t = prompt.trim_end().to_lowercase();
+    t.ends_with(':')
+        && ["password", "passcode", "passphrase", "secret", "pin"]
+            .iter()
+            .any(|w| t.contains(w))
+}
+
 /// Plain-text copy of everything the device printed, next to the hex log.
 pub struct Transcript {
     file: File,
@@ -409,6 +415,33 @@ mod tests {
         assert!(t.at_password_prompt());
         t.feed(b"\r\nSwitch>");
         assert!(!t.at_password_prompt());
+    }
+
+    #[test]
+    fn secret_prompts_are_recognised() {
+        assert!(asks_for_secret("Password:"));
+        assert!(asks_for_secret("admin@switch's password: "));
+        assert!(asks_for_secret(
+            "Enter passphrase for key '/home/j/.ssh/id_ed25519':"
+        ));
+        assert!(!asks_for_secret("Username:"));
+        assert!(!asks_for_secret("password reset done"));
+    }
+
+    /// A long prompt wraps in a narrow pane: the cursor's screen row no longer
+    /// shows "password", but the device's current line still does, which is
+    /// why the monitor checks both.
+    #[test]
+    fn a_wrapped_prompt_is_still_a_password_prompt_on_the_device_line() {
+        let prompt = b"admin@a-long-hostname.example.com's password: ";
+        let mut t = Term::new();
+        t.resize(24, 10); // the cursor row is just "word: "
+        t.feed(prompt);
+        assert!(!t.at_password_prompt());
+        let mut cleaner = TextCleaner::default();
+        let mut out = String::new();
+        cleaner.feed(prompt, &mut out);
+        assert!(asks_for_secret(&cleaner.partial()));
     }
 
     #[test]

@@ -85,6 +85,14 @@ enum Cmd {
         #[arg(long)]
         bind: Option<String>,
     },
+    /// SSH to a host with your system's ssh
+    Ssh {
+        /// [user@]host, or a Host alias from ~/.ssh/config
+        destination: Option<String>,
+        /// SSH port (default: last used, else 22)
+        #[arg(short, long)]
+        port: Option<u16>,
+    },
     /// Telnet to a switch, router or server
     Telnet {
         /// Host name or IP
@@ -163,6 +171,25 @@ fn apply_cli(cmd: &Option<Cmd>, s: &mut config::Saved) -> bool {
                 s.tcp_port = p.to_string();
             }
             host.is_some() && port.is_some()
+        }
+        Some(Cmd::Ssh { destination, port }) => {
+            s.mode = ConnMode::Ssh;
+            if let Some(d) = destination {
+                match d.rsplit_once('@') {
+                    Some((user, host)) => {
+                        s.ssh_user = user.to_string();
+                        s.ssh_host = host.to_string();
+                    }
+                    None => {
+                        s.ssh_user.clear();
+                        s.ssh_host = d.clone();
+                    }
+                }
+            }
+            if let Some(p) = port {
+                s.ssh_port = p.to_string();
+            }
+            destination.is_some()
         }
         Some(Cmd::Telnet { host, port }) => {
             s.mode = ConnMode::Telnet;

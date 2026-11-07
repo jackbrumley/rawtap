@@ -4,7 +4,7 @@ See and send raw serial and TCP data, in hex and text. A console when you need o
 
 RawTap started as a small Python monitor (`rawtap.py`) and is now a single program for Linux and Windows that also works as a switch/console terminal.
 
-- Watches a serial port, TCP connection, TCP listener or **Telnet** session in **hex and text**, and logs everything. It also pulls scanner images out of the stream, as before.
+- Watches a serial port, TCP connection, TCP listener, **Telnet** or **SSH** session in **hex and text**, and logs everything. It also pulls scanner images out of the stream, as before.
 - **Live terminal pane** shows the device the way PuTTY does: `--More--` paging, backspaces and colours all work.
 - **Sends** hex or ASCII a whole line at a time, or every keystroke live (Tab completion, `?`, Ctrl+C...).
 - **Hidden sends** for passwords. Passwords typed at a `Password:` prompt never reach the log either.
@@ -158,6 +158,7 @@ rawtap serial -p COM3 -b 9600            (also --data-bits --parity --stop-bits 
 rawtap tcp -H 192.168.1.50 -p 2101       connect out
 rawtap listen -p 9000 [--bind 0.0.0.0]   wait for a client
 rawtap telnet -H 192.168.1.1 [-p 23]     Telnet login to a switch or router
+rawtap ssh [user@]host [-p 22]           SSH login, through your system's ssh
 rawtap serial -p /dev/ttyUSB0 -b 9600    (Linux)
 rawtap ports                             list serial ports
 rawtap update                            update to the latest release
@@ -174,7 +175,8 @@ Same settings as the Python version (`image_extraction` in the config), plus:
 ## Limitations
 
 - For a switch's Telnet login (port 23), choose **Telnet** as the connection: RawTap answers the Telnet negotiation (it lets the device echo, reports its window size and says it's an XTERM) and notes what was agreed in the raw log. **TCP client** stays raw: every byte, no negotiation, for terminal servers and devices.
-- Break works on serial ports and Telnet.
+- **SSH** runs your system's own `ssh` (OpenSSH; on Windows 10+ it's the optional "OpenSSH Client" feature) inside RawTap's terminal pane, so your keys, agent, `~/.ssh/config` and `known_hosts` work as usual and RawTap never handles credentials. It starts in live keys, so ssh's own questions (host key, password) can be answered; a password typed or pasted there is logged as `<hidden>`. The raw log shows what the remote prints, after decryption.
+- Break works on serial ports and Telnet (not SSH).
 - When the window is resized, existing terminal lines aren't re-wrapped (PuTTY doesn't re-wrap them either).
 
 ## Code layout

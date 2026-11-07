@@ -169,6 +169,7 @@ pub enum ConnMode {
     Tcp,
     Listen,
     Telnet,
+    Ssh,
 }
 
 impl ConnMode {
@@ -178,6 +179,7 @@ impl ConnMode {
             ConnMode::Tcp => "TCP client (connect out)",
             ConnMode::Listen => "TCP server (listen)",
             ConnMode::Telnet => "Telnet (switch, router)",
+            ConnMode::Ssh => "SSH (your system's ssh)",
         }
     }
     pub fn cycle(self, dir: i32) -> Self {
@@ -186,6 +188,7 @@ impl ConnMode {
             ConnMode::Tcp,
             ConnMode::Listen,
             ConnMode::Telnet,
+            ConnMode::Ssh,
         ];
         let i = all.iter().position(|m| *m == self).unwrap() as i32;
         all[(i + dir).rem_euclid(all.len() as i32) as usize]
@@ -293,6 +296,9 @@ pub struct Saved {
     pub listen_port: String,
     pub telnet_host: String,
     pub telnet_port: String,
+    pub ssh_host: String,
+    pub ssh_user: String,
+    pub ssh_port: String,
     pub logging: bool,
     /// Session log level (F1 → Debug): error, warn, info, debug or trace.
     pub log_level: String,
@@ -318,6 +324,9 @@ impl Default for Saved {
             listen_port: String::new(),
             telnet_host: String::new(),
             telnet_port: "23".into(),
+            ssh_host: String::new(),
+            ssh_user: String::new(),
+            ssh_port: "22".into(),
             logging: true,
             log_level: crate::session_log::level_name(crate::session_log::DEFAULT_LEVEL).into(),
             last_update_check: None,
