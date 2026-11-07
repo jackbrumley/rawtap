@@ -175,7 +175,7 @@ Same settings as the Python version (`image_extraction` in the config), plus:
 ## Limitations
 
 - For a switch's Telnet login (port 23), choose **Telnet** as the connection: RawTap answers the Telnet negotiation (it lets the device echo, reports its window size and says it's an XTERM) and notes what was agreed in the raw log. **TCP client** stays raw: every byte, no negotiation, for terminal servers and devices.
-- **SSH** runs your system's own `ssh` (OpenSSH; on Windows 10+ it's the optional "OpenSSH Client" feature) inside RawTap's terminal pane, so your keys, agent, `~/.ssh/config` and `known_hosts` work as usual and RawTap never handles credentials. It starts in live keys, so ssh's own questions (host key, password) can be answered; a password typed or pasted there is logged as `<hidden>`. The raw log shows what the remote prints, after decryption.
+- **SSH** runs your system's own `ssh` (OpenSSH; on Windows 10+ it's the optional "OpenSSH Client" feature) inside RawTap's terminal pane, so your keys, agent, `~/.ssh/config` and `known_hosts` work as usual and RawTap never handles credentials. Before starting ssh, RawTap checks that the server answers (at the address and port your `~/.ssh/config` gives it; a jump host is left to ssh), so an unreachable server fails straight away with the reason instead of a blank screen. It starts in live keys, so ssh's own questions (host key, password) can be answered; a password typed or pasted there is logged as `<hidden>`. The raw log shows what the remote prints, after decryption.
 - Break works on serial ports and Telnet (not SSH).
 - When the window is resized, existing terminal lines aren't re-wrapped (PuTTY doesn't re-wrap them either).
 

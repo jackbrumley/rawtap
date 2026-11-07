@@ -3,6 +3,7 @@
 //! reads and posts events; sends go through a shared writer.
 
 mod pty;
+mod ssh;
 mod telnet;
 
 use serialport::{DataBits, FlowControl, Parity, StopBits};
@@ -252,12 +253,25 @@ impl Link {
                 thread::spawn(move || telnet_read_loop(reader, session, writer2, stop2, tx))
             }
             LinkSettings::Ssh { host, user, port } => {
-                let mut args = vec!["-p".to_string(), port.to_string()];
-                if !user.is_empty() {
-                    args.extend(["-l".to_string(), user.clone()]);
-                }
-                args.push(host.clone());
-                let spawned = pty::spawn("ssh", &args, tx)?;
+                pty::require("ssh")?;
+                // Only claim the server was reached once it has answered.
+                let target = ssh::target(host, user, *port)?;
+                let reached = match &target.via {
+                    Some(via) => format!(
+                        "ssh goes through a jump host ({via}), so RawTap can't check {}:{} first. ssh is logging in; its questions (host key, password) appear in the terminal pane.",
+                        target.hostname, target.port
+                    ),
+                    None => {
+                        connect_tcp(&target.hostname, target.port)?;
+                        format!(
+                            "Reached {}:{}. ssh is logging in; its questions (host key, password) appear in the terminal pane.",
+                            target.hostname, target.port
+                        )
+                    }
+                };
+                let spawned = pty::spawn("ssh", &ssh::args(host, user, *port), tx.clone())?;
+                // Ignored when the monitor is already gone; nothing to tell then.
+                let _ = tx.send(LinkEvent::Info(reached));
                 *writer.lock().unwrap() = Some(Writer::Pty(spawned.input));
                 pty_session = Some(spawned.session);
                 spawned.waiter
@@ -549,7 +563,7 @@ fn connect_tcp(host: &str, port: u16) -> Result<TcpStream, String> {
             "\nNothing is listening on that port, or a firewall is rejecting it."
         }
         ErrorKind::TimedOut => {
-            "\nNo answer within 5 s. Check the IP address, network and firewall."
+            "\nNo answer within 5 s. Check the IP address, network, VPN and firewall."
         }
         _ => "",
     };
@@ -706,6 +720,36 @@ mod tests {
         assert_eq!(receive(3), [b'a', 255, 255]);
         link.send_break(Duration::ZERO).unwrap();
         assert_eq!(receive(2), [255, 243]);
+    }
+
+    /// ssh is only started once the server answers: a port nobody listens
+    /// on fails straight away with the reason, and no ssh runs.
+    #[test]
+    fn ssh_to_a_server_that_does_not_answer_never_starts_ssh() {
+        if pty::require("ssh").is_err() {
+            return; // no OpenSSH client on this machine
+        }
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port(); // the listener is dropped: nothing listens now
+        let (tx, rx) = mpsc::channel();
+        let Err(error) = Link::open(
+            &LinkSettings::Ssh {
+                host: "127.0.0.1".into(),
+                user: String::new(),
+                port,
+            },
+            tx,
+        ) else {
+            panic!("connecting to a closed port should fail");
+        };
+        assert!(error.contains("Failed to connect"), "{error}");
+        assert!(
+            rx.try_recv().is_err(),
+            "nothing should have been reported as reached"
+        );
     }
 
     #[test]

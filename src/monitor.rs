@@ -26,6 +26,8 @@ pub const MAX_ENTRIES: usize = 20_000;
 const MAX_HISTORY: usize = 200;
 /// Bytes arriving closer together than this are shown as one log entry.
 const COALESCE_IDLE: Duration = Duration::from_millis(30);
+/// How long ssh may print nothing before the raw log says so.
+const SSH_SILENCE_NOTE: Duration = Duration::from_secs(10);
 const COALESCE_MAX: usize = 1024;
 const BREAK_LEN: Duration = Duration::from_millis(300);
 
@@ -160,6 +162,9 @@ pub struct Monitor {
     pub history: Vec<HistoryItem>,
     hist_pos: Option<usize>,
     draft: Vec<char>,
+    /// When an SSH session started, until ssh first prints something: a long
+    /// silence gets a note (see `tick`).
+    silent_since: Option<Instant>,
     /// Hidden (password) send in progress.
     pub secret: Option<Vec<char>>,
 
@@ -237,6 +242,7 @@ impl Monitor {
             history,
             hist_pos: None,
             draft: Vec::new(),
+            silent_since: None,
             secret: None,
             macros,
             run: None,
@@ -312,8 +318,11 @@ impl Monitor {
                     self.settings.describe()
                 )
             }
+            // ssh is still logging in; the link notes when the server answered.
+            LinkSettings::Ssh { .. } => format!("Starting {}", self.settings.describe()),
             _ => format!("Connected: {}", self.settings.describe()),
         };
+        self.silent_since = matches!(self.settings, LinkSettings::Ssh { .. }).then(Instant::now);
         self.push(EntryKind::Good(msg));
         if let Some(l) = &self.logger {
             let p = l.path.display().to_string();
@@ -332,6 +341,7 @@ impl Monitor {
     pub fn detach(&mut self, why: &str) {
         self.flush_pending();
         self.run = None;
+        self.silent_since = None;
         if self.link.is_some() || self.logger.is_some() {
             self.push(EntryKind::Info(why.to_string()));
         }
@@ -502,6 +512,15 @@ impl Monitor {
     pub fn tick(&mut self) {
         self.autoscroll();
         if self
+            .silent_since
+            .is_some_and(|t| t.elapsed() >= SSH_SILENCE_NOTE)
+        {
+            self.silent_since = None;
+            self.push(EntryKind::Info(
+                "ssh hasn't printed anything for 10 s. It may still be logging in (slow name lookups or Kerberos/GSSAPI can take a while). Ctrl+C stops it.".into(),
+            ));
+        }
+        if self
             .pending
             .as_ref()
             .is_some_and(|p| p.last.elapsed() >= COALESCE_IDLE)
@@ -570,6 +589,7 @@ impl Monitor {
         let normal_end = matches!(ev, LinkEvent::Ended(_));
         match ev {
             LinkEvent::Data(d) => {
+                self.silent_since = None;
                 self.rx_bytes += d.len() as u64;
                 self.term.feed(&d);
                 self.plain.feed(&d, &mut self.plain_text);
@@ -610,6 +630,7 @@ impl Monitor {
                 }
             }
             LinkEvent::Closed(m) | LinkEvent::Ended(m) => {
+                self.silent_since = None;
                 self.flush_pending();
                 self.link = None;
                 self.connected = false;

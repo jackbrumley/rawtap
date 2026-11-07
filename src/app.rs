@@ -248,6 +248,7 @@ impl App {
         let link = match Link::open(&settings, self.tx.clone()) {
             Ok(l) => l,
             Err(e) => {
+                log::warn!("Could not connect to {}: {e}", settings.describe());
                 self.setup.error = Some(e);
                 self.screen = Screen::Setup;
                 return;
@@ -318,7 +319,7 @@ impl App {
             }
             Err(e) => {
                 if let Some(m) = self.monitor.as_mut() {
-                    m.push(EntryKind::Error(e));
+                    m.report_error(e);
                 }
             }
         }

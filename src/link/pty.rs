@@ -34,9 +34,7 @@ pub struct Spawned {
 /// Starts `program` with `args` in an 80×24 pseudo-terminal (the monitor
 /// reports the pane's real size straight after).
 pub fn spawn(program: &str, args: &[String], tx: Sender<LinkEvent>) -> Result<Spawned, String> {
-    if !on_path(program) {
-        return Err(missing_program_message(program));
-    }
+    require(program)?;
     let pair = native_pty_system()
         .openpty(PtySize::default())
         .map_err(|e| format!("Could not open a pseudo-terminal: {e}"))?;
@@ -122,6 +120,15 @@ impl PtySession {
             // Usually it had already exited.
             log::debug!("Stopping the program: {e}");
         }
+    }
+}
+
+/// An error saying how to install `program` when it isn't on PATH.
+pub fn require(program: &str) -> Result<(), String> {
+    if on_path(program) {
+        Ok(())
+    } else {
+        Err(missing_program_message(program))
     }
 }
 
