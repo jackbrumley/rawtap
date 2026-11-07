@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>RawTap · Install</title>
-  <meta name="description" content="RawTap is a free, open-source serial and TCP monitor and console for Linux and Windows: see and send raw data in hex and text. Install it with one command." />
+  <meta name="description" content="RawTap is a free, open-source serial and TCP monitor and console for Linux and Windows: see every byte in hex and text, carriage returns and line feeds included, send raw hex, and pick up where you left off. Install it with one command." />
   <link rel="icon" href="assets/icon.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -71,12 +71,23 @@
       </div>
     </section>
 
+    <section class="about">
+      <h2>Why RawTap</h2>
+      <p>I built RawTap for my day job. I spend a lot of time connecting to devices over TCP, as both a client and a server, and over serial: fixed barcode scanners on conveyor belts, printers, scales weighing product. When you're writing a driver for one, or checking that a connection is sending what it should, you need to see exactly what comes down the wire.</p>
+      <p>Tools like PuTTY hide most of that. They don't show the carriage returns and line feeds, they don't show the raw hex, and they won't send raw hex either. And every new session starts from scratch: the port, the IP address and the settings, typed in again.</p>
+      <p>RawTap shows every byte in hex and text, control characters included, sends hex or text, and opens straight back on the connection you used last.</p>
+      <p class="signature">Jack Brumley</p>
+    </section>
+
     <section class="features">
       <h2>What it does</h2>
       <ul>
-        <li>Watches a serial port, TCP connection or TCP listener in hex and text, and logs everything to a file</li>
-        <li>A live terminal pane for switch and router consoles: paging, colours and Tab completion work like PuTTY</li>
-        <li>Sends hex or text a line at a time or key by key, hides passwords from the logs, and runs macros that wait for a prompt and save the output</li>
+        <li>Shows every byte as hex and text, with carriage returns, line feeds and other control characters visible</li>
+        <li>Sends text or raw hex, a line at a time or key by key</li>
+        <li>Serial ports, TCP client and TCP server, all in one tool</li>
+        <li>Remembers your last connection and each device's settings, so it opens ready to go</li>
+        <li>A live terminal for switch and router consoles: paging, colours and Tab completion work like PuTTY, and passwords stay out of the logs</li>
+        <li>Logs everything to a file, and macros can wait for a prompt and save the output</li>
       </ul>
     </section>
 
