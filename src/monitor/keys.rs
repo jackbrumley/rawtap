@@ -20,8 +20,8 @@ impl Monitor {
             Cmd::ToggleLive => {
                 self.live = !self.live;
                 if self.live {
-                    if self.profile.layout == Layout::Log {
-                        self.profile.layout = Layout::Split;
+                    if self.layout == Layout::Hex {
+                        self.layout = Layout::Split;
                     }
                     self.focus = Pane::Terminal;
                     self.term.scroll_to(0);
@@ -51,7 +51,7 @@ impl Monitor {
                 self.term.clear();
             }
             Cmd::FocusPane => {
-                if self.profile.layout == Layout::Split {
+                if self.layout == Layout::Split {
                     self.focus = match self.focus {
                         Pane::Log => Pane::Terminal,
                         Pane::Terminal => Pane::Log,
@@ -158,11 +158,7 @@ impl Monitor {
                 self.hist_pos = None;
             }
             Setting::Layout => {
-                let l = menu::step(
-                    &[Layout::Split, Layout::Log, Layout::Terminal],
-                    self.profile.layout,
-                    dir,
-                );
+                let l = menu::step(&crate::config::VIEWS, self.layout, dir);
                 self.set_layout(l);
             }
             Setting::LogFormat => {
@@ -246,11 +242,9 @@ impl Monitor {
                 menu.selected = 0;
             }
             KeyCode::F(1) => return Action::None,
-            KeyCode::Char('p') if ctrl && !alt => return Action::None,
             KeyCode::Char('q') if ctrl && !alt => return Action::Quit,
             KeyCode::Up if n > 0 => menu.selected = (sel + n - 1) % n,
-            KeyCode::Down | KeyCode::Tab if n > 0 => menu.selected = (sel + 1) % n,
-            KeyCode::BackTab if n > 0 => menu.selected = (sel + n - 1) % n,
+            KeyCode::Down if n > 0 => menu.selected = (sel + 1) % n,
             KeyCode::PageUp => menu.selected = sel.saturating_sub(8),
             KeyCode::PageDown => menu.selected = (sel + 8).min(n.saturating_sub(1)),
             KeyCode::Home => menu.selected = 0,
@@ -292,28 +286,13 @@ impl Monitor {
         if self.paste_confirm.is_some() {
             match k.code {
                 KeyCode::Enter => self.send_confirmed_paste(),
-                KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('N') => {
+                KeyCode::Esc => {
                     self.paste_confirm = None;
                     self.set_status("Paste cancelled", false);
                 }
                 _ => {}
             }
             return Action::None;
-        }
-        // Terminal-style copy / paste (also works in live keys: Ctrl+C alone still goes to the device).
-        if ctrl && k.modifiers.contains(KeyModifiers::SHIFT) {
-            match k.code {
-                KeyCode::Char(c) if c.eq_ignore_ascii_case(&'c') => {
-                    self.copy_selection();
-                    return Action::None;
-                }
-                KeyCode::Char(c) if c.eq_ignore_ascii_case(&'v') => {
-                    self.paste_clipboard();
-                    return Action::None;
-                }
-                KeyCode::Char(c) if c.eq_ignore_ascii_case(&'q') => return Action::Quit,
-                _ => {}
-            }
         }
         if self.menu.is_some() {
             return self.menu_key(k);
@@ -323,7 +302,7 @@ impl Monitor {
         if let Some(secret) = self.secret.as_mut() {
             match k.code {
                 KeyCode::Enter => self.submit_secret(),
-                KeyCode::Esc | KeyCode::F(6) => {
+                KeyCode::Esc => {
                     self.secret = None;
                     self.set_status("Hidden send cancelled", false);
                 }
@@ -378,18 +357,14 @@ impl Monitor {
         let alt = k.modifiers.contains(KeyModifiers::ALT);
         match k.code {
             KeyCode::Char('q') if ctrl && !alt => return Action::Quit,
+            // One key per job: point there instead of being a second way.
             KeyCode::Char('c') if ctrl && !alt => {
-                if self.selection.is_some_and(|s| !s.is_empty()) {
-                    self.copy_selection();
-                } else {
-                    self.set_status("Ctrl+Q quits · Ctrl+Shift+C copies a selection", false);
-                }
+                self.set_status("Ctrl+Q quits · right-click copies a selection", false)
             }
             KeyCode::Char('r') if ctrl && !alt => return Action::Reconnect,
             KeyCode::Char('n') if ctrl && !alt => return Action::NewConnection,
             KeyCode::Char('t') if ctrl && !alt => self.change_setting(Setting::CharDelay, 1),
-            KeyCode::Char('p') if ctrl && !alt => self.menu = Some(Menu::default()),
-            KeyCode::Tab | KeyCode::BackTab => self.change_setting(Setting::InputMode, 1),
+            KeyCode::Tab => self.change_setting(Setting::InputMode, 1),
             KeyCode::Enter => self.submit(),
             KeyCode::Esc => {
                 if self.run.take().is_some() {

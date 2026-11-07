@@ -40,13 +40,13 @@ impl Monitor {
     }
 
     pub(super) fn set_layout(&mut self, l: Layout) {
-        self.profile.layout = l;
+        self.layout = l;
         match l {
-            Layout::Log => {
+            Layout::Hex => {
                 self.focus = Pane::Log;
                 if self.live {
                     self.live = false;
-                    self.set_status("Live keys off: no terminal pane in log-only layout", false);
+                    self.set_status("Live keys off: the Hex view has no terminal pane", false);
                     return;
                 }
             }
@@ -55,7 +55,7 @@ impl Monitor {
         }
         self.follow = true;
         self.scroll = 0;
-        self.set_status(format!("Layout: {}", l.label()), false);
+        self.set_status(format!("View: {}", l.label()), false);
     }
 
     pub(super) fn copy_selection(&mut self) {
@@ -103,7 +103,7 @@ impl Monitor {
         }
     }
 
-    /// Pasted text, from Ctrl+Shift+V, right-click, or the console typing a paste in.
+    /// Pasted text, from right-click, or the console typing a paste in.
     pub fn on_paste(&mut self, text: String) {
         let text = text.replace("\r\n", "\n").replace('\r', "\n");
         let ends_with_newline = text.ends_with('\n');
@@ -270,11 +270,20 @@ impl Monitor {
                 self.scroll_lines(pane, ev.kind == MouseEventKind::ScrollUp, WHEEL_LINES);
             }
             MouseEventKind::Down(MouseButton::Left) => {
+                let clicked_view = self
+                    .footer_views
+                    .iter()
+                    .find(|(r, _)| r.contains((x, y).into()))
+                    .map(|(_, view)| *view);
+                if let Some(view) = clicked_view {
+                    self.set_layout(view);
+                    return;
+                }
                 let Some(p) = self.pane_at(x, y) else {
                     self.selection = None;
                     return;
                 };
-                if self.profile.layout == Layout::Split {
+                if self.layout == Layout::Split {
                     self.focus = p;
                 }
                 let pos = self.pos_at(p, x, y);

@@ -168,8 +168,8 @@ fn draw_paste_confirm(f: &mut Frame, m: &Monitor) {
 }
 
 fn split_body(m: &mut Monitor, body: Rect) -> (Option<Rect>, Option<Rect>) {
-    match m.profile.layout {
-        PaneLayout::Log => (Some(body), None),
+    match m.layout {
+        PaneLayout::Hex => (Some(body), None),
         PaneLayout::Terminal => (None, Some(body)),
         PaneLayout::Split if body.width >= SIDE_BY_SIDE_MIN => {
             m.side_by_side = true;
@@ -202,7 +202,7 @@ fn split_body(m: &mut Monitor, body: Rect) -> (Option<Rect>, Option<Rect>) {
 }
 
 fn pane_block(m: &Monitor, pane: Pane) -> Block<'static> {
-    let focused = m.profile.layout != PaneLayout::Split || m.focus == pane;
+    let focused = m.layout != PaneLayout::Split || m.focus == pane;
     let color = if !m.connected {
         Color::DarkGray
     } else if focused {

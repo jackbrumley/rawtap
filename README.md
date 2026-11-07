@@ -48,7 +48,7 @@ Everything lives in one folder, on Linux and Windows alike: `~/.config/rawtap` (
 ## Screen
 
 ```
-┌ Raw log · compact ───────────┐┌ Terminal 94×26 ──────────────── LIVE KEYS · F4 to leave ┐
+┌ Hex · compact ───────────────┐┌ Terminal 94×26 ──────────────── LIVE KEYS · F4 to leave ┐
 │12:48:35 TX  1 20       │     ││Switch#show running-config                               │
 │12:48:35 RX 63 08 08 …  │ <BS…││Building configuration...                                │
 │12:48:35 RX 33 69 6E …  │ int…││interface GigabitEthernet1/0/1                           │
@@ -56,12 +56,10 @@ Everything lives in one folder, on Linux and Windows alike: `~/.config/rawtap` (
 ┌  LIVE KEYS  Enter sends CR ─────────────────────────────────────────────────────────────┐
 ```
 
-- **Split** is the default layout: the raw log on the left and the terminal on the right.
-  - If the window is under 130 columns wide, the panes stack instead: the terminal on top and a small log strip above the send box.
-  - **F3** cycles split → log only → terminal only.
-  - **Ctrl+←/→** changes the terminal width; **Ctrl+↑/↓** changes the log strip height.
-- **Each connection remembers its own settings** (`serial:COM22`, `tcp:10.0.0.5:2101`...): layout, log format, line ending, HEX/ASCII and pane sizes. A switch and a scanner feed can each keep their own setup.
-- **The raw log groups bytes into one entry per line**, starting a new entry on a newline, a 30 ms gap, a change of direction, or every 1 KB. **F8** cycles the format: compact (one row each) → hex+text → hex → text.
+- **The view**: **Terminal** (the live terminal), **Hex** (the raw data in hex and text) or **Split** (both: side by side when the window is at least 130 columns wide, stacked otherwise). Switch with **F3** or click it in the footer (`View Terminal Split Hex`). RawTap remembers the last view you used and opens every connection in it.
+  - **Ctrl+←/→** changes the terminal width; **Ctrl+↑/↓** changes the Hex strip height.
+- **Each connection remembers its own settings** (`serial:COM22`, `tcp:10.0.0.5:2101`...): hex format, line ending, HEX/ASCII, char delay and pane sizes. A switch and a scanner feed can each keep their own setup.
+- **The Hex pane groups bytes into one entry per line**, starting a new entry on a newline, a 30 ms gap, a change of direction, or every 1 KB. **F8** cycles the format: compact (one row each) → hex+text → hex → text.
 
 ## Sending
 
@@ -77,7 +75,7 @@ In live keys, anything typed while the cursor is just after a `Password:` / `Pas
 
 ## Menu (F1)
 
-**F1** opens a menu in the middle of the screen. **Ctrl+P** also opens it in line mode; in live keys mode Ctrl+P goes to the device, which uses it as its own "previous command" key. The menu lists every action, macro and setting for this connection.
+**F1** opens a menu in the middle of the screen. The menu lists every action, macro and setting for this connection.
 - **↑↓** to move.
 - **←→** changes a setting straight away. That includes the on/off switches: live keys, raw log following/paused and the PgUp/PgDn scroll pane. The menu stays open.
 - **Enter** runs an action.
@@ -88,7 +86,7 @@ The **Debug** section at the bottom has what a bug report needs: *Copy log* (Raw
 
 A short description of the highlighted item is shown at the bottom. On screen, the footer shows only F1 Menu, F4 Live keys, Ctrl+N New connection and Ctrl+Q Quit.
 
-The start screen has an **Options ▸** row (←→ or Enter to open it). It shows the remembered line ending, char delay, send mode and layout for the selected port or host, so you can set them before connecting. These are the same settings the F1 menu changes.
+The start screen has an **Options ▸** row (←→ or Enter to open it). It shows the remembered line ending, char delay and send mode for the selected port or host, and the view, so you can set them before connecting. These are the same settings the F1 menu changes.
 
 ## Mouse, copy and paste
 
@@ -99,12 +97,12 @@ These follow Windows Terminal conventions:
 | Scroll back | Mouse wheel over either pane scrolls that pane; nothing is sent to the device |
 | Select | Drag in the terminal or raw log pane. Only that pane's text is selected, with no borders. To go beyond one screen, drag past the top or bottom edge (it auto-scrolls) or use the wheel while dragging. **Ctrl+click** extends an existing selection; scroll first if you need to. |
 | Raw log copies | Always whole entries, in full log-file form (`[time] RX HEX: …` / `RX TEXT: …`), even if the screen shows the compact view. Hidden sends stay `<hidden>`. |
-| Copy | **Ctrl+Shift+C**, or right-click while something is selected. In line mode Ctrl+C also copies a selection; in live keys Ctrl+C goes to the device. |
-| Paste | **Ctrl+Shift+V**, or right-click with nothing selected. One line goes into the send box (in live keys, straight to the device). **Several lines ask for confirmation**, then go line by line with the line ending and the char delay. |
+| Copy | **Right-click** while something is selected. |
+| Paste | **Right-click** with nothing selected (your terminal's own paste works too). One line goes into the send box (in live keys, straight to the device). **Several lines ask for confirmation**, then go line by line with the line ending and the char delay. |
 | Long output | F1 → *Copy all terminal output*, or *Open transcript* (Notepad on Windows, your default text app on Linux) |
 | The console's own selection | **Shift+drag** |
 
-Ctrl+C never quits. Ctrl+Q quits in line mode, and **Ctrl+Shift+Q** quits from anywhere, including live keys. (In Windows Terminal, Shift+click is taken by the console's own selection, which is why extending uses Ctrl+click.)
+**Ctrl+Q** quits, from the start screen, a session or the menu. In live keys every key goes to the device, so press **F4** to leave live keys first. Ctrl+C never quits. (In Windows Terminal, Shift+click is taken by the console's own selection, which is why extending uses Ctrl+click.)
 
 ## Shortcut keys
 
@@ -112,11 +110,11 @@ Everything below is also in the F1 menu. The shortcuts are for when you already 
 
 | Key | Action |
 |-----|--------|
-| F1 / Ctrl+P | menu |
-| F2 / F3 / F4 | line ending / layout / live keys |
-| F5 | which pane PgUp/PgDn scroll (split layout) |
+| F1 | menu |
+| F2 / F3 / F4 | line ending / view (Terminal, Split, Hex; also click it in the footer) / live keys |
+| F5 | which pane PgUp/PgDn scroll (Split view) |
 | F6 / F7 | hidden send / break (300 ms on serial, for password recovery and ROMMON; Telnet's break command on Telnet) |
-| F8 / F9 / F10 | log format / pause-follow the log / clear both panes (the files keep everything) |
+| F8 / F9 / F10 | hex format / pause-follow the Hex pane / clear both panes (the files keep everything) |
 | PgUp/PgDn, Ctrl+Home/End | scroll the focused pane / jump to its top or bottom |
 | Ctrl+T | char delay 0 / 2 / 5 / 10 / 20 / 50 ms between sent characters, for consoles that garble fast input (remembered per connection) |
 | Ctrl+R / Ctrl+N / Ctrl+Q | reconnect / new connection / quit (line mode) |

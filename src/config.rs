@@ -195,22 +195,27 @@ impl ConnMode {
     }
 }
 
-/// Which panes the monitor shows.
+/// Which panes the monitor shows: the view (F3, or a click on the footer's
+/// switch). One "last used" view for every connection; a favourite can fix
+/// its own.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Layout {
+    Terminal,
     #[default]
     Split,
-    Log,
-    Terminal,
+    Hex,
 }
+
+/// The views in the order F3 cycles them and the footer shows them.
+pub const VIEWS: [Layout; 3] = [Layout::Terminal, Layout::Split, Layout::Hex];
 
 impl Layout {
     pub fn label(self) -> &'static str {
         match self {
-            Layout::Split => "split",
-            Layout::Log => "log only",
-            Layout::Terminal => "terminal only",
+            Layout::Terminal => "Terminal",
+            Layout::Split => "Split",
+            Layout::Hex => "Hex",
         }
     }
 }
@@ -238,11 +243,11 @@ impl LogFormat {
     }
 }
 
-/// View/send preferences remembered per connection (e.g. "serial:COM22").
+/// Send and display preferences remembered per connection (e.g.
+/// "serial:COM22"). The view itself is one setting for all (`Saved::view`).
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Profile {
-    pub layout: Layout,
     /// Log format when sharing the screen with the terminal.
     pub split_log: LogFormat,
     /// Log format in log-only layout.
@@ -261,7 +266,6 @@ pub struct Profile {
 impl Default for Profile {
     fn default() -> Self {
         Profile {
-            layout: Layout::Split,
             split_log: LogFormat::Compact,
             full_log: LogFormat::Both,
             line_ending: LineEnding::Cr,
@@ -300,6 +304,8 @@ pub struct Saved {
     pub ssh_user: String,
     pub ssh_port: String,
     pub logging: bool,
+    /// The view last used, for every connection without a fixed one.
+    pub view: Layout,
     /// Session log level (F1 → Debug): error, warn, info, debug or trace.
     pub log_level: String,
     /// When the update check last finished (F1 → Updates, "Last checked").
@@ -328,6 +334,7 @@ impl Default for Saved {
             ssh_user: String::new(),
             ssh_port: "22".into(),
             logging: true,
+            view: Layout::Split,
             log_level: crate::session_log::level_name(crate::session_log::DEFAULT_LEVEL).into(),
             last_update_check: None,
             history: Vec::new(),

@@ -1,4 +1,4 @@
-//! The F1 / Ctrl+P pop-up menu: every action and per-connection setting in one searchable list,
+//! The F1 pop-up menu: every action and per-connection setting in one searchable list,
 //! with a description of the highlighted item.
 
 use crate::codec::InputMode;
@@ -81,7 +81,7 @@ pub fn send_mode_desc() -> &'static str {
     "How the send box reads what you type. ASCII: text, plus \\r \\n \\xHH and <STX>-style tokens. HEX: bytes like 02 41 03, sent exactly."
 }
 pub fn layout_desc() -> &'static str {
-    "Split shows the raw log and the live terminal together: side by side when the window is wide, stacked when it's narrow. Or show just one."
+    "Terminal shows just the live terminal; Hex just the raw data (hex and text); Split both, side by side when the window is wide. RawTap remembers the last one you used, for every connection. Also F3, or click the switch in the footer."
 }
 
 fn setting(
@@ -169,14 +169,14 @@ pub fn items(m: &Monitor) -> Vec<Item> {
     v.push(cmd(
         "COPY & PASTE",
         "Copy selection",
-        "Ctrl+Shift+C",
+        "Right-click",
         "Copies what you selected with the mouse. Drag past the pane edge (or use the wheel) to select more than a screen; Ctrl+click extends. Raw log copies whole entries in full.".into(),
         Cmd::Copy,
     ));
     v.push(cmd(
         "COPY & PASTE",
         "Paste",
-        "Ctrl+Shift+V",
+        "Right-click",
         "Pastes the clipboard. One line goes into the send box (or straight to the device in live keys). Several lines ask first, then go line by line using the char delay.".into(),
         Cmd::Paste,
     ));
@@ -225,38 +225,38 @@ pub fn items(m: &Monitor) -> Vec<Item> {
     ));
     v.push(setting(
         settings_section,
-        "Layout",
-        m.profile.layout.label().into(),
+        "View",
+        m.layout.label().into(),
         "F3",
         layout_desc(),
         Setting::Layout,
     ));
     v.push(setting(
         settings_section,
-        "Raw log format",
+        "Hex format",
         m.log_format().label().into(),
         "F8",
-        "How the raw log pane shows data: compact (one row each), hex+text, hex only or text only. The log file always has both.",
+        "How the Hex pane shows data: compact (one row each), hex+text, hex only or text only. The log file always has both.",
         Setting::LogFormat,
     ));
 
     // View
-    if m.profile.layout == Layout::Split {
+    if m.layout == Layout::Split {
         v.push(setting(
             "VIEW",
             "Scroll pane",
-            if m.focus == crate::monitor::Pane::Log { "raw log".into() } else { "terminal".into() },
+            if m.focus == crate::monitor::Pane::Log { "Hex".into() } else { "Terminal".into() },
             "F5",
-            "Which pane PgUp / PgDn scroll in the split layout. The mouse wheel always scrolls the pane under the pointer.",
+            "Which pane PgUp / PgDn scroll in the Split view. The mouse wheel always scrolls the pane under the pointer.",
             Setting::ScrollPane,
         ));
     }
     v.push(setting(
         "VIEW",
-        "Raw log",
+        "Hex pane",
         if m.follow { "following".into() } else { "paused".into() },
         "F9",
-        "Paused freezes the raw log pane so you can read it. Data is still received and saved to the log file.",
+        "Paused freezes the Hex pane so you can read it. Data is still received and saved to the log file.",
         Setting::LogFollow,
     ));
     v.push(cmd(
@@ -304,7 +304,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         "SESSION",
         "Quit",
         "Ctrl+Q",
-        "Closes RawTap. Settings and history are saved. Ctrl+Shift+Q also quits from live keys."
+        "Closes RawTap. Settings and history are saved. In live keys every key goes to the device, so press F4 to leave live keys first."
             .into(),
         Cmd::Quit,
     ));

@@ -506,7 +506,7 @@ mod screen_tests {
         t.draw(|f| ui::draw(f, &mut app)).unwrap();
         let screen = screen_text(&t);
         let row_of = |text: &str| screen.lines().position(|l| l.contains(text)).unwrap();
-        let box_bottom = row_of("Esc quit");
+        let box_bottom = row_of("Ctrl+Q quit");
         let dialog_top = row_of("Update Available");
         assert!(
             dialog_top < box_bottom,
@@ -562,6 +562,72 @@ mod screen_tests {
         assert!(error.contains("Failed to connect"), "{error}");
         t.draw(|f| ui::draw(f, &mut app)).unwrap();
         assert!(screen_text(&t).contains("to connect"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The footer's view switch: clicking a word switches the view, and the
+    /// last view used is where the next connection opens.
+    #[test]
+    fn the_view_switch_is_clickable_and_follows_you() {
+        let dir = std::env::temp_dir().join(format!("rawtap_view_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                std::thread::sleep(Duration::from_secs(5));
+                drop(stream);
+            }
+        });
+        let connect = |view: config::Layout| {
+            let paths = paths::Paths::at(dir.clone());
+            let (cfg, _) = config::load(&paths).unwrap();
+            let saved = config::Saved {
+                mode: ConnMode::Tcp,
+                tcp_host: "127.0.0.1".into(),
+                tcp_port: port.to_string(),
+                view,
+                ..Default::default()
+            };
+            let mut app = App::new(cfg, paths, saved, Vec::new(), true);
+            app.request_connect();
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            while app.monitor.is_none() && std::time::Instant::now() < deadline {
+                app.tick();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            app
+        };
+
+        let mut app = connect(config::Layout::Split);
+        let mut t = Terminal::new(TestBackend::new(120, 30)).unwrap();
+        t.draw(|f| ui::draw(f, &mut app)).unwrap();
+        let footer = screen_text(&t).lines().last().unwrap().to_string();
+        assert!(footer.contains("View  Terminal  Split  Hex"), "{footer}");
+        let (hex, _) = app
+            .monitor
+            .as_ref()
+            .unwrap()
+            .footer_views
+            .iter()
+            .copied()
+            .find(|(_, v)| *v == config::Layout::Hex)
+            .unwrap();
+        app.on_event(Event::Mouse(ratatui::crossterm::event::MouseEvent {
+            kind: ratatui::crossterm::event::MouseEventKind::Down(
+                ratatui::crossterm::event::MouseButton::Left,
+            ),
+            column: hex.x + 1,
+            row: hex.y,
+            modifiers: KeyModifiers::NONE,
+        }));
+        assert_eq!(app.monitor.as_ref().unwrap().layout, config::Layout::Hex);
+        app.shutdown().unwrap();
+        assert_eq!(app.saved.view, config::Layout::Hex);
+
+        // A new connection opens in the last view used.
+        let app = connect(app.saved.view);
+        assert_eq!(app.monitor.as_ref().unwrap().layout, config::Layout::Hex);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

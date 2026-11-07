@@ -124,7 +124,7 @@ impl App {
     }
 
     /// Handle everything that arrived since the last frame. A burst of typed characters
-    /// (Windows Terminal's Ctrl+Shift+V / right-click paste) is treated as one paste.
+    /// (the console's own paste) is treated as one paste.
     pub fn on_events(&mut self, batch: Vec<Event>) {
         // The update dialog takes keys one by one: a burst is never a paste into it.
         if self.update_prompt.is_some() {
@@ -258,6 +258,7 @@ impl App {
             settings.clone(),
             key,
             profile,
+            self.saved.view,
             self.saved.history.clone(),
             macros,
             extractor,
@@ -317,6 +318,7 @@ impl App {
             self.saved
                 .profiles
                 .insert(m.profile_key.clone(), m.profile.clone());
+            self.saved.view = m.layout;
             m.detach("Session closed.");
         }
         while self.rx.try_recv().is_ok() {}
@@ -330,6 +332,7 @@ impl App {
             self.saved
                 .profiles
                 .insert(m.profile_key.clone(), m.profile.clone());
+            self.saved.view = m.layout;
         }
         self.saved.log_level = crate::session_log::level_name(log::max_level()).into();
         config::store_saved(&self.paths, &self.saved).inspect_err(|error| log::error!("{error}"))
@@ -411,11 +414,11 @@ impl App {
 
     fn setup_key(&mut self, k: KeyEvent) {
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
-        // While connecting the form waits: Esc cancels, Ctrl+Q / Ctrl+C still quit.
+        // While connecting the form waits: Esc cancels, Ctrl+Q still quits.
         if self.connecting.is_some() {
             match k.code {
                 KeyCode::Esc => self.cancel_connect(),
-                KeyCode::Char('q') | KeyCode::Char('c') if ctrl => self.quit = true,
+                KeyCode::Char('q') if ctrl => self.quit = true,
                 _ => {}
             }
             return;
@@ -425,11 +428,10 @@ impl App {
         self.setup.focus = self.setup.focus.min(n - 1);
         let field = fields[self.setup.focus];
         match k.code {
-            KeyCode::Char('q') | KeyCode::Char('c') if ctrl => self.quit = true,
+            KeyCode::Char('q') if ctrl => self.quit = true,
             KeyCode::Char('u') if ctrl => self.request_update(),
-            KeyCode::Esc => self.quit = true,
-            KeyCode::Up | KeyCode::BackTab => self.setup.focus = (self.setup.focus + n - 1) % n,
-            KeyCode::Down | KeyCode::Tab => self.setup.focus = (self.setup.focus + 1) % n,
+            KeyCode::Up => self.setup.focus = (self.setup.focus + n - 1) % n,
+            KeyCode::Down => self.setup.focus = (self.setup.focus + 1) % n,
             KeyCode::Left => self.cycle(field, -1),
             KeyCode::Right => self.cycle(field, 1),
             KeyCode::Enter if field == Field::Options => self.cycle(field, 1),
@@ -440,7 +442,6 @@ impl App {
                     t.pop();
                 }
             }
-            KeyCode::Char(' ') if !field.is_text() => self.cycle(field, 1),
             KeyCode::Char(c) if !ctrl || k.modifiers.contains(KeyModifiers::ALT) => {
                 if let Some(t) = self.text_mut(field) {
                     t.push(c);
@@ -485,9 +486,10 @@ impl App {
             Field::Flow => s.flow = cycle_in(FLOWS, &s.flow, dir),
             Field::Logging => s.logging = !s.logging,
             Field::Options => self.setup.options_open = !self.setup.options_open,
-            Field::OptLineEnding | Field::OptCharDelay | Field::OptSendMode | Field::OptLayout => {
+            // The view is one setting for every connection, not per profile.
+            Field::OptLayout => s.view = crate::menu::step(&crate::config::VIEWS, s.view, dir),
+            Field::OptLineEnding | Field::OptCharDelay | Field::OptSendMode => {
                 use crate::codec::LineEnding as L;
-                use crate::config::Layout as Ly;
                 let key = form_profile_key(s);
                 let p = s.profiles.entry(key).or_default();
                 match f {
@@ -499,13 +501,9 @@ impl App {
                         p.char_delay_ms =
                             crate::menu::step(&crate::menu::CHAR_DELAYS, p.char_delay_ms, dir)
                     }
-                    Field::OptSendMode => {
+                    _ => {
                         p.input_mode =
                             crate::menu::step(&crate::menu::input_modes(), p.input_mode, dir)
-                    }
-                    _ => {
-                        p.layout =
-                            crate::menu::step(&[Ly::Split, Ly::Log, Ly::Terminal], p.layout, dir)
                     }
                 }
             }
@@ -572,7 +570,7 @@ impl App {
                     "{arrow} {} · {delay} · {} · {}",
                     p.line_ending.label(),
                     p.input_mode.label(),
-                    p.layout.label()
+                    self.saved.view.label()
                 )
             }
             Field::OptLineEnding => self.form_profile().line_ending.label().into(),
@@ -581,7 +579,7 @@ impl App {
                 ms => format!("{ms} ms"),
             },
             Field::OptSendMode => self.form_profile().input_mode.label().into(),
-            Field::OptLayout => self.form_profile().layout.label().into(),
+            Field::OptLayout => self.saved.view.label().into(),
         }
     }
 }

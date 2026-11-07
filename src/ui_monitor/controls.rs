@@ -142,7 +142,7 @@ pub(super) fn draw_input(f: &mut Frame, m: &Monitor, area: Rect) {
 }
 
 /// One calm line: the few keys you need, plus the latest status message on the right.
-pub(super) fn draw_footer(f: &mut Frame, m: &Monitor, area: Rect) {
+pub(super) fn draw_footer(f: &mut Frame, m: &mut Monitor, area: Rect) {
     let key = |k: &str| {
         Span::styled(
             format!(" {k} "),
@@ -150,15 +150,51 @@ pub(super) fn draw_footer(f: &mut Frame, m: &Monitor, area: Rect) {
         )
     };
     let txt = |t: &str| Span::raw(format!(" {t}   "));
-    let spans = if m.live {
+
+    // The view switch first, so a narrow window never hides it. Each word is
+    // clickable: its place is kept for `Monitor::on_mouse`.
+    let mut spans = vec![Span::styled(" View ", DIM)];
+    let mut x = area.x + spans[0].width() as u16;
+    m.footer_views.clear();
+    for view in crate::config::VIEWS {
+        let word = format!(" {} ", view.label());
+        let style = if view == m.layout {
+            Style::new()
+                .fg(Color::Black)
+                .bg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::new().fg(Color::Gray)
+        };
+        let width = word.chars().count() as u16;
+        m.footer_views.push((
+            Rect {
+                x,
+                y: area.y,
+                width,
+                height: 1,
+            },
+            view,
+        ));
+        x += width;
+        spans.push(Span::styled(word, style));
+    }
+    spans.push(key("F3"));
+    if m.layout != crate::config::Layout::Terminal {
+        spans.push(Span::styled(
+            format!("  Hex: {} ", m.log_format().label()),
+            DIM,
+        ));
+        spans.push(key("F8"));
+    }
+    spans.push(Span::raw("  │  "));
+    spans.extend(if m.live {
         vec![
             key("F1"),
             txt("Menu"),
             key("F4"),
-            txt("Stop live keys"),
-            key("Ctrl+Shift+Q"),
-            txt("Quit"),
-            Span::styled("Other keys go to the device", DIM),
+            txt("Leave live keys"),
+            Span::styled("Every other key goes to the device", DIM),
         ]
     } else {
         vec![
@@ -171,7 +207,7 @@ pub(super) fn draw_footer(f: &mut Frame, m: &Monitor, area: Rect) {
             key("Ctrl+Q"),
             txt("Quit"),
         ]
-    };
+    });
     let left_w: u16 = spans.iter().map(|s| s.width() as u16).sum();
     let [l, r] = Layout::horizontal([
         Constraint::Length(left_w.min(area.width)),
@@ -361,23 +397,23 @@ pub(super) fn draw_help(f: &mut Frame) {
     let text = vec![
         h("Everything is in the F1 menu. These shortcuts are for when you know what you want:"),
         l(""),
-        l("  F1 / Ctrl+P  menu (Ctrl+P only in line mode: in live keys it goes to the device)"),
-        l("  F2  line ending          F3  layout              F4  live keys on/off"),
-        l("  F5  pane PgUp/Dn scrolls F6  hidden send         F7  serial break"),
-        l("  F8  raw log format       F9  pause raw log       F10 clear screen"),
+        l("  F1  menu"),
+        l("  F2  line ending          F3  view (Terminal/Split/Hex)   F4  live keys on/off"),
+        l("  F5  pane PgUp/Dn scrolls F6  hidden send         F7  break"),
+        l("  F8  hex format           F9  pause Hex pane      F10 clear screen"),
         l("  Ctrl+T char delay   Tab HEX/ASCII   ↑↓ history   Esc clear box / cancel macro"),
         l("  Ctrl+R reconnect    Ctrl+N new connection        Ctrl+Q quit"),
         l("  PgUp/PgDn scroll    Ctrl+Home/End top/bottom     Ctrl+←→ / Ctrl+↑↓ resize panes"),
         l(
             "  Mouse: wheel scrolls the pane under it · drag selects (drag past the edge, or use the",
         ),
-        l("         wheel, to keep going) · Ctrl+click extends · Ctrl+Shift+C copies"),
-        l("         Raw log copies whole entries in full (hex + text), whatever the view."),
-        l("  Ctrl+Shift+Q quits from anywhere, including live keys."),
+        l("         wheel, to keep going) · Ctrl+click extends"),
         l(
-            "         Ctrl+Shift+V or right-click pastes (asks first if several lines) · Shift+drag = console select",
+            "         Right-click copies a selection, or pastes when nothing is selected (asks first",
         ),
-        l("  Macros: Alt+0..9, Shift+F1..F12, F11, F12 (set in rawtap_config.json)"),
+        l("         if several lines). The Hex pane copies whole entries in full (hex + text)."),
+        l("  In live keys every key goes to the device: F4 leaves live keys, then Ctrl+Q quits."),
+        l("  Macros: Alt+0..9, Shift+F1..F12, F11, F12 (set in settings.json)"),
         l(""),
         h("Send box"),
         l("  HEX    02 41 03   024103   0x02,0x41,0x03   02:41:03   (sent exactly as typed)"),

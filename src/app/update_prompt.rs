@@ -152,15 +152,15 @@ impl App {
         self.update_prompt = Some(UpdatePrompt::new(check));
     }
 
-    /// Keys while the dialog is open: ←/→ or Tab choose, Enter presses,
+    /// Keys while the dialog is open: ←/→ choose, Enter presses,
     /// Esc is Later / Close. Nothing reaches the screen behind it.
     pub(super) fn update_prompt_key(&mut self, k: KeyEvent) {
         let Some(prompt) = self.update_prompt.as_mut() else {
             return;
         };
         match k.code {
-            KeyCode::Left | KeyCode::BackTab => prompt.move_selection(-1),
-            KeyCode::Right | KeyCode::Tab => prompt.move_selection(1),
+            KeyCode::Left => prompt.move_selection(-1),
+            KeyCode::Right => prompt.move_selection(1),
             KeyCode::Esc => self.update_prompt = None,
             KeyCode::Enter => match prompt.selected {
                 PromptButton::Later => self.update_prompt = None,

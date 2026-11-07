@@ -65,7 +65,7 @@ impl Field {
             Field::OptLineEnding => "  Line ending",
             Field::OptCharDelay => "  Char delay",
             Field::OptSendMode => "  Send mode",
-            Field::OptLayout => "  Layout",
+            Field::OptLayout => "  View",
         }
     }
 

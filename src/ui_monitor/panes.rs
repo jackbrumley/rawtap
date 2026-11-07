@@ -182,7 +182,7 @@ pub(super) fn compact_line(
 pub(super) fn draw_log(f: &mut Frame, m: &mut Monitor, area: Rect) {
     let fmt = m.log_format();
     let mut block = pane_block(m, Pane::Log).title_top(Line::from(vec![
-        Span::raw(" Raw log "),
+        Span::raw(" Hex "),
         Span::styled(format!("· {} (F8) ", fmt.label()), DIM),
     ]));
     if !m.follow {

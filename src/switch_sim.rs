@@ -314,7 +314,7 @@ fn drive_a_switch() {
     for _ in 0..2 {
         mouse(&mut app, MouseEventKind::ScrollDown, t.x + 5, t.y + 5);
     }
-    // ---- Drag-select two terminal lines and copy with Ctrl+Shift+C.
+    // ---- Drag-select two terminal lines and copy with a right-click.
     dump(&mut app, 160, 34, "back at the bottom");
     let screen = app.monitor.as_ref().unwrap().term.screen().contents();
     let rows: Vec<&str> = screen.lines().collect();
@@ -366,10 +366,12 @@ fn drive_a_switch() {
             "highlight leaked outside the pane"
         );
     }
-    key(
+    // Right-click copies the selection.
+    mouse(
         &mut app,
-        KeyCode::Char('C'),
-        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        MouseEventKind::Down(MouseButton::Right),
+        t.x + 1,
+        t.y + 1,
     );
     let copied = crate::clip::get().unwrap();
     println!("===== copied from terminal pane:\n{copied}\n=====");
@@ -411,10 +413,12 @@ fn drive_a_switch() {
         app.monitor.as_ref().unwrap().term.screen().scrollback() > 0,
         "dragging past the edge didn't auto-scroll"
     );
-    key(
+    // Right-click copies the selection.
+    mouse(
         &mut app,
-        KeyCode::Char('C'),
-        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        MouseEventKind::Down(MouseButton::Right),
+        t.x + 1,
+        t.y + 1,
     );
     let long = crate::clip::get().unwrap();
     let n = long.lines().count();
@@ -471,10 +475,12 @@ fn drive_a_switch() {
         modifiers: KeyModifiers::CONTROL,
     }));
     mouse(&mut app, MouseEventKind::Up(MouseButton::Left), t.x, t.y);
-    key(
+    // Right-click copies the selection.
+    mouse(
         &mut app,
-        KeyCode::Char('C'),
-        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        MouseEventKind::Down(MouseButton::Right),
+        t.x + 1,
+        t.y + 1,
     );
     let ext = crate::clip::get().unwrap();
     assert!(
@@ -516,10 +522,12 @@ fn drive_a_switch() {
             ratatui::style::Color::LightBlue
         );
     }
-    key(
+    // Right-click copies the selection.
+    mouse(
         &mut app,
-        KeyCode::Char('C'),
-        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        MouseEventKind::Down(MouseButton::Right),
+        t.x + 1,
+        t.y + 1,
     );
     let logcopy = crate::clip::get().unwrap();
     println!("===== copied from raw log (compact view on screen):");
@@ -574,12 +582,15 @@ fn drive_a_switch() {
     }
     key(&mut app, KeyCode::Enter, none);
     pump(&mut app, 150);
-    // Single line via Ctrl+Shift+V goes into the send box, not straight out.
+    // A single pasted line goes into the send box, not straight out.
     crate::clip::set("show interfaces status").unwrap();
-    key(
+    // Right-click with nothing selected pastes.
+    app.monitor.as_mut().unwrap().selection = None;
+    mouse(
         &mut app,
-        KeyCode::Char('V'),
-        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        MouseEventKind::Down(MouseButton::Right),
+        t.x + 1,
+        t.y + 1,
     );
     assert_eq!(
         app.monitor.as_ref().unwrap().input_text(),
@@ -672,15 +683,18 @@ fn drive_a_switch() {
         }
     }
 
-    // Ctrl+Shift+Q quits even from live keys.
     key(&mut app, KeyCode::F(4), none);
     assert!(app.monitor.as_ref().unwrap().live);
-    key(
-        &mut app,
-        KeyCode::Char('Q'),
-        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    // One quit key: in live keys Ctrl+Q goes to the device; F4 leaves live
+    // keys, then Ctrl+Q quits.
+    key(&mut app, KeyCode::Char('q'), KeyModifiers::CONTROL);
+    assert!(
+        !app.quit,
+        "Ctrl+Q quit from live keys instead of going to the device"
     );
-    assert!(app.quit, "Ctrl+Shift+Q didn't quit from live keys");
+    key(&mut app, KeyCode::F(4), KeyModifiers::NONE);
+    key(&mut app, KeyCode::Char('q'), KeyModifiers::CONTROL);
+    assert!(app.quit, "F4 then Ctrl+Q didn't quit");
 
     app.shutdown().unwrap();
     let logs = dir.join("logs");

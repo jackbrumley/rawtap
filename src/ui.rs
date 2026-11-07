@@ -227,7 +227,7 @@ fn draw_setup(f: &mut Frame, app: &App) {
             Span::raw(" raw serial / TCP monitor "),
         ]))
         .title_bottom(Line::from(Span::styled(
-            " ↑↓ move  ←→ change  type to edit  Enter connect  F5 rescan  Esc quit ",
+            " ↑↓ move  ←→ change  type to edit  Enter connect  F5 rescan  Ctrl+Q quit ",
             DIM,
         )))
         .border_style(Style::new().fg(Color::Cyan));

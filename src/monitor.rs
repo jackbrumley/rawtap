@@ -139,6 +139,10 @@ pub struct Monitor {
     pub settings: LinkSettings,
     pub profile_key: String,
     pub profile: Profile,
+    /// The view this session shows (Terminal / Split / Hex).
+    pub layout: Layout,
+    /// Where the footer drew each view word, for clicks.
+    pub footer_views: Vec<(Rect, Layout)>,
     pub link: Option<Link>,
     pub logger: Option<Logger>,
     pub transcript: Option<Transcript>,
@@ -212,12 +216,13 @@ impl Monitor {
         settings: LinkSettings,
         profile_key: String,
         profile: Profile,
+        layout: Layout,
         history: Vec<HistoryItem>,
         macros: Vec<LoadedMacro>,
         extractor: Extractor,
         capture_dir: PathBuf,
     ) -> Monitor {
-        let focus = if profile.layout == Layout::Log {
+        let focus = if layout == Layout::Hex {
             Pane::Log
         } else {
             Pane::Terminal
@@ -226,6 +231,8 @@ impl Monitor {
             settings,
             profile_key,
             profile,
+            layout,
+            footer_views: Vec::new(),
             link: None,
             logger: None,
             transcript: None,
@@ -275,15 +282,15 @@ impl Monitor {
     }
 
     pub fn log_format(&self) -> LogFormat {
-        match self.profile.layout {
-            Layout::Log => self.profile.full_log,
+        match self.layout {
+            Layout::Hex => self.profile.full_log,
             _ => self.profile.split_log,
         }
     }
 
     fn set_log_format(&mut self, f: LogFormat) {
-        match self.profile.layout {
-            Layout::Log => self.profile.full_log = f,
+        match self.layout {
+            Layout::Hex => self.profile.full_log = f,
             _ => self.profile.split_log = f,
         }
         self.follow = true;
