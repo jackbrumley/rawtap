@@ -202,7 +202,13 @@ serial_group() {
   return 1
 }
 
-add_user_to_serial_group() {
+# Sets serial_group_name and serial_user when the user still needs adding to
+# the serial-port group; leaves them empty otherwise. The change itself rides
+# on the install's own root call where there is one, so a graphical pkexec
+# prompt (which remembers nothing) asks for the password only once.
+serial_group_name=""
+serial_user=""
+plan_serial_group_change() {
   local group user
   user="${SUDO_USER:-$(id -un)}"
   if ! group="$(serial_group)"; then
@@ -214,13 +220,19 @@ add_user_to_serial_group() {
     log "${user} can already use serial ports (${group} group)"
     return 0
   fi
-  log "Adding ${user} to the ${group} group so RawTap can open serial ports (needs your password)"
-  if ! acquire_root || ! run_as_root usermod -aG "$group" "$user"; then
-    warn "could not add ${user} to the ${group} group, so serial ports may be refused."
-    warn "Fix it with: sudo usermod -aG ${group} ${user}   (then log out and back in)"
-    return 0
+  serial_group_name="$group"
+  serial_user="$user"
+}
+
+report_serial_group_change() {
+  local succeeded="$1"
+  [[ -n "$serial_group_name" ]] || return 0
+  if [[ "$succeeded" == true ]]; then
+    log "Added ${serial_user} to ${serial_group_name}. Log out and back in for it to take effect."
+  else
+    warn "could not add ${serial_user} to the ${serial_group_name} group, so serial ports may be refused."
+    warn "Fix it with: sudo usermod -aG ${serial_group_name} ${serial_user}   (then log out and back in)"
   fi
-  log "Added ${user} to ${group}. Log out and back in for it to take effect."
 }
 
 remove_user_appimage() {
@@ -326,6 +338,9 @@ fi
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
+# apt reads a local .deb as its sandbox user (_apt), which can't enter
+# mktemp's private folder; without this apt falls back to root with a notice.
+chmod 0755 "$tmp_dir"
 package_path="${tmp_dir}/${asset_name}"
 
 log "Downloading ${asset_url}"
@@ -339,26 +354,42 @@ else
 fi
 
 stop_running_process
+plan_serial_group_change
+if [[ -n "$serial_group_name" ]]; then
+  log "Adding ${serial_user} to the ${serial_group_name} group so RawTap can open serial ports"
+fi
 
 if [[ "$install_system" == true ]]; then
   # A user-local AppImage would shadow the system package, so remove it.
   remove_user_appimage
   log "Installing with ${pm}"
-  if [[ "$pm" == "dnf" ]]; then
-    run_as_root dnf install -y "$package_path"
-  else
-    # A stale package list names dependency versions the mirror has since
-    # removed (404), so refresh it first. An unrelated broken repository can
-    # make the refresh fail; the install is still worth trying then.
-    # One root call, so a graphical pkexec prompt (the in-app updater) asks
-    # for the password once.
-    # shellcheck disable=SC2016 # $1 expands in the root shell.
-    run_as_root bash -c '
+  # One root call for the whole system install, so a graphical pkexec prompt
+  # (curl | bash, or the in-app updater) asks for the password once:
+  #  - apt: a stale package list names dependency versions the mirror has
+  #    since removed (404), so refresh it first. An unrelated broken
+  #    repository can make the refresh fail; the install is still worth
+  #    trying then.
+  #  - then the serial-port group change, if one is needed. Exit 3 means only
+  #    that failed; the package is installed.
+  # shellcheck disable=SC2016 # $1..$4 expand in the root shell.
+  root_status=0
+  run_as_root bash -c '
+    if [ "$1" = dnf ]; then
+      dnf install -y "$2" || exit 1
+    else
       apt-get update \
         || echo "[rawtap] WARNING: apt-get update failed; installing with the existing package list" >&2
-      apt-get install -y "$1"
-    ' bash "$package_path"
-  fi
+      apt-get install -y "$2" || exit 1
+    fi
+    if [ -n "$3" ]; then
+      usermod -aG "$3" "$4" || exit 3
+    fi
+  ' bash "$pm" "$package_path" "$serial_group_name" "$serial_user" || root_status=$?
+  case "$root_status" in
+    0) report_serial_group_change true ;;
+    3) report_serial_group_change false ;;
+    *) fail "the ${pm} install failed (exit ${root_status}); see the output above" ;;
+  esac
   log "System install complete"
 else
   install_dir="${HOME}/.local/bin"
@@ -397,9 +428,16 @@ EOF
   if [[ ":$PATH:" != *":${install_dir}:"* ]]; then
     log "Note: ${install_dir} is not in your PATH. Launch RawTap from your app menu, or add it to PATH."
   fi
-fi
 
-add_user_to_serial_group
+  # The AppImage install's only root step.
+  if [[ -n "$serial_group_name" ]]; then
+    if acquire_root && run_as_root usermod -aG "$serial_group_name" "$serial_user"; then
+      report_serial_group_change true
+    else
+      report_serial_group_change false
+    fi
+  fi
+fi
 
 optional_cmd update-desktop-database && update-desktop-database "${HOME}/.local/share/applications" >/dev/null 2>&1 || true
 optional_cmd gtk-update-icon-cache && gtk-update-icon-cache -f -t -q "${HOME}/.local/share/icons/hicolor" >/dev/null 2>&1 || true
