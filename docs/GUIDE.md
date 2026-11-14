@@ -1,0 +1,183 @@
+# RawTap Guide
+
+How to use RawTap day to day. For installing, see the [README](../README.md).
+
+## Where RawTap keeps its files
+
+Everything lives in one folder, on Linux and Windows alike: `~/.config/rawtap` (Windows: `%USERPROFILE%\.config\rawtap`). On first run RawTap creates a starter `settings.json` there. RawTap 0.6.0 kept `rawtap_config.json` and `rawtap_state.json` next to the exe; the first run of a newer version moves them here (as `settings.json` and `state.json`). Logs and captures written by 0.6.0 stay where they were.
+
+## Favourites
+
+Save any connection (serial port, TCP client or server, Telnet, SSH) with a name, and it's listed at the top of the start screen.
+
+- **Ctrl+S** on the start screen saves what's on the form. The name starts as what it connects to (`SSH admin@10.0.0.5:22`); type over it.
+- **F1 → Save as favourite…** in a session saves the connection you're in.
+- On the start screen, **↑↓** onto a favourite fills the form with it and its options; **Enter** connects, **F2** renames it, **Del** removes it (after asking).
+- A favourite opens in its connection's view (Options ▸ View, below), so a switch can always open in the terminal.
+- From the command line: `rawtap open "Core switch"` (any case).
+
+Favourites are kept in `state.json`. Passwords are never saved there.
+
+## Passwords
+
+RawTap never writes a password to its own files. Two ways to stop typing one:
+
+- **SSH key login** (best for servers): log in once, then **F1 → Set up key login**. RawTap makes an SSH key if you have none (`~/.ssh/id_ed25519`, no passphrase; add one any time with `ssh-keygen -p`) and types a command into the server's shell that adds it to `~/.ssh/authorized_keys`. From then on ssh logs in with the key. For Linux and other Unix servers.
+- **Remember password** (any connection, e.g. a switch's Telnet or console login): **F1 → Remember password…**, type it (hidden), Enter. It's kept in your operating system's keyring: GNOME Keyring or KWallet on Linux, Windows Credential Manager on Windows. RawTap sends it, hidden, at the first password prompt of each connection; if it's wrong, the next prompt is yours, and **F1 → Forget password** removes it. Only offered when a keyring is available (the session log says why when it isn't).
+
+## Screen
+
+```
+┌ Hex · compact ───────────────┐┌ Terminal 94×26 ──────────────── LIVE KEYS · F4 to leave ┐
+│12:48:35 TX  1 20       │     ││Switch#show running-config                               │
+│12:48:35 RX 63 08 08 …  │ <BS…││Building configuration...                                │
+│12:48:35 RX 33 69 6E …  │ int…││interface GigabitEthernet1/0/1                           │
+└──────────────────────────────┘└─────────────────────────────────────────────────────────┘
+┌  LIVE KEYS  Enter sends CR ─────────────────────────────────────────────────────────────┐
+```
+
+- **The view**: **Terminal** (the live terminal), **Hex** (the raw data in hex and text) or **Split** (both: side by side when the window is at least 130 columns wide, stacked otherwise). Switch with **F3** or click it in the footer (`View Terminal Split Hex`). RawTap remembers the last view you used and opens every connection in it, unless the start screen's Options ▸ View gives that connection its own (Terminal, Split or Hex).
+  - **Ctrl+←/→** changes the terminal width; **Ctrl+↑/↓** changes the Hex strip height.
+- **Each connection remembers its own settings** (`serial:COM22`, `tcp:10.0.0.5:2101`...): hex format, line ending, HEX/ASCII, char delay and pane sizes. A switch and a scanner feed can each keep their own setup.
+- **The Hex pane groups bytes into one entry per line**, starting a new entry on a newline, a 30 ms gap, a change of direction, or every 1 KB. **F8** cycles the format: compact (one row each) → hex+text → hex → text.
+
+## Sending
+
+| Mode | How |
+|------|-----|
+| Line mode (default) | Type, Enter sends. **Tab** HEX↔ASCII. **↑↓** history. **F2** line ending (default **CR**: CRLF counts as two Enters on most switches). |
+| HEX | `02 41 03`, `024103`, `0x02,0x41,0x03`, `02:41:03`. Sent exactly as typed. |
+| ASCII | Text, then the line ending. Also takes `\r \n \t \0 \e \\ \xHH` and the display tokens `<STX> <CR> <0x1B>`, so a received TEXT line can be pasted back. `\<` sends a literal `<`. |
+| Live keys (**F4**) | Every key goes straight to the device: Tab, `?`, space at `--More--`, Ctrl+C/Z, arrows. F-keys still work. Press F4 again to get back to line mode, where Ctrl+Q/R/N work. |
+| Hidden send (**F6**) | Typed masked, then sent with the line ending. Logged only as `<hidden: N bytes>` and never kept in history. Works from line mode or live keys. |
+
+In live keys, anything typed while the cursor is just after a `Password:` / `Passcode:` / `Secret:` / `PIN:` prompt is also logged as `<hidden>`.
+
+## Menu (F1)
+
+**F1** opens a menu in the middle of the screen. The menu lists every action, macro and setting for this connection.
+- **↑↓** to move.
+- **←→** changes a setting straight away. That includes the on/off switches: live keys, raw log following/paused and the PgUp/PgDn scroll pane. The menu stays open.
+- **Enter** runs an action.
+- **Typing** filters the list (`delay`, `break`, `save`...).
+- **Esc** closes it.
+
+The **Debug** section at the bottom has what a bug report needs: *Copy log* (RawTap's own session log), *Open log folder*, *Copy system info* and the *Log level*.
+
+A short description of the highlighted item is shown at the bottom. On screen, the footer shows only F1 Menu, F4 Live keys, Ctrl+N New connection and Ctrl+Q Quit.
+
+The start screen has an **Options ▸** row (←→ or Enter to open it). It shows the line ending, char delay, send mode and view remembered for the selected port or host, so you can set them before connecting. The view is **Last used** (whichever you used last) or always **Terminal**, **Split** or **Hex** for that connection. The line under the form lists what Enter and the other keys do for the highlighted row.
+
+## Mouse, copy and paste
+
+These follow Windows Terminal conventions:
+
+| Action | How |
+|--------|-----|
+| Scroll back | Mouse wheel over either pane scrolls that pane; nothing is sent to the device |
+| Select | Drag in the terminal or raw log pane. Only that pane's text is selected, with no borders. To go beyond one screen, drag past the top or bottom edge (it auto-scrolls) or use the wheel while dragging. **Ctrl+click** extends an existing selection; scroll first if you need to. |
+| Raw log copies | Always whole entries, in full log-file form (`[time] RX HEX: …` / `RX TEXT: …`), even if the screen shows the compact view. Hidden sends stay `<hidden>`. |
+| Copy | **Right-click** while something is selected. |
+| Paste | **Right-click** with nothing selected (your terminal's own paste works too). One line goes into the send box (in live keys, straight to the device). **Several lines ask for confirmation**, then go line by line with the line ending and the char delay. |
+| Long output | F1 → *Copy all terminal output*, or *Open transcript* (Notepad on Windows, your default text app on Linux) |
+| The console's own selection | **Shift+drag** |
+
+**Ctrl+Q** quits, from the start screen, a session or the menu. In live keys every key goes to the device, so press **F4** to leave live keys first. Ctrl+C never quits. (In Windows Terminal, Shift+click is taken by the console's own selection, which is why extending uses Ctrl+click.)
+
+## Shortcut keys
+
+Everything below is also in the F1 menu. The shortcuts are for when you already know what you want.
+
+| Key | Action |
+|-----|--------|
+| F1 | menu |
+| F2 / F3 / F4 | line ending / view (Terminal, Split, Hex; also click it in the footer) / live keys |
+| F5 | which pane PgUp/PgDn scroll (Split view) |
+| F6 / F7 | hidden send / break (300 ms on serial, for password recovery and ROMMON; Telnet's break command on Telnet) |
+| F8 / F9 / F10 | hex format / pause-follow the Hex pane / clear both panes (the files keep everything) |
+| PgUp/PgDn, Ctrl+Home/End | scroll the focused pane / jump to its top or bottom |
+| Ctrl+T | char delay 0 / 2 / 5 / 10 / 20 / 50 ms between sent characters, for consoles that garble fast input (remembered per connection) |
+| Ctrl+R / Ctrl+N / Ctrl+Q | reconnect / new connection / quit (line mode) |
+| Esc | clear the send box, or cancel a running macro |
+
+## Macros
+
+Macros live in `settings.json`. They can use **Alt+0..9**, **Shift+F1..F12**, **F11** or **F12** (plain F1–F10 are built-in keys). A macro is either one `data` send or a list of `steps`. Within a step, things run in the order `delay_ms` → `send`/`send_hex` → `wait` (for this text) → `wait_idle_ms` (until the device goes quiet), with an optional `timeout_ms` (default 10 s). `capture: true` saves everything the device printed while the macro ran to `captures/<label>_<time>.txt`.
+
+```json
+{ "key": "Alt+9", "label": "Switch: save running-config", "capture": true,
+  "steps": [
+    { "send": "terminal length 0", "wait": "#" },
+    { "send": "show running-config", "wait_idle_ms": 2000, "timeout_ms": 120000 }
+  ] }
+```
+
+Don't put passwords in macros. Log in first (using F6), then run the macro.
+
+## Files written
+
+All paths are inside `~/.config/rawtap`. The `logs` and `captures` folders can be changed in `settings.json`.
+
+| File | What |
+|------|------|
+| `logs/rawtap_<type>_<time>.log` | Everything sent and received: timestamp, RX/TX, hex and text. Hidden sends show only their length. |
+| `logs/rawtap_<type>_<time>.txt` | Plain-text transcript of what the device printed, with escape codes and `--More--` cleaned out |
+| `captures/*.txt` | Macro captures |
+| `logs/extracted_images/*.bmp` | Image extraction (see below) |
+| `settings.json` | Your macros, folders and image extraction settings (edit by hand, then restart RawTap) |
+| `state.json` | Last connection, per-connection settings, line-mode history, log level |
+| `debug/session.log`, `debug/last-session.log` | RawTap's own log for this run and the previous one, for bug reports (F1 → Debug) |
+
+## Command line
+
+```text
+rawtap                                   start screen
+rawtap serial -p COM3 -b 9600            (also --data-bits --parity --stop-bits --flow)
+rawtap tcp -H 192.168.1.50 -p 2101       connect out
+rawtap listen -p 9000 [--bind 0.0.0.0]   wait for a client
+rawtap telnet -H 192.168.1.1 [-p 23]     Telnet login to a switch or router
+rawtap ssh [user@]host [-p 22]           SSH login, through your system's ssh
+rawtap open "Core switch"                open a favourite by name
+rawtap serial -p /dev/ttyUSB0 -b 9600    (Linux)
+rawtap ports                             list serial ports
+rawtap update                            update to the latest release
+rawtap --system-info                     version, OS and terminal, for bug reports
+--no-log                                 don't write log/transcript files
+```
+
+## Image extraction
+
+Same settings as the Python version (`image_extraction` in the config), plus:
+- `file_extension` (default `bmp`)
+- `max_payload_bytes` (default 16 MB), so a corrupt size field can't make it buffer forever.
+
+## Limitations
+
+- For a switch's Telnet login (port 23), choose **Telnet** as the connection: RawTap answers the Telnet negotiation (it lets the device echo, reports its window size and says it's an XTERM) and notes what was agreed in the raw log. **TCP client** stays raw: every byte, no negotiation, for terminal servers and devices.
+- **SSH** runs your system's own `ssh` (OpenSSH; on Windows 10+ it's the optional "OpenSSH Client" feature) inside RawTap's terminal pane, so your keys, agent, `~/.ssh/config` and `known_hosts` work as usual and RawTap never handles credentials. Before starting ssh, RawTap checks that the server answers (at the address and port your `~/.ssh/config` gives it; a jump host is left to ssh), so an unreachable server fails straight away with the reason instead of a blank screen. It starts in live keys, so ssh's own questions (host key, password) can be answered; a password typed or pasted there is logged as `<hidden>`. The raw log shows what the remote prints, after decryption.
+- Break works on serial ports and Telnet (not SSH).
+- When the window is resized, existing terminal lines aren't re-wrapped (PuTTY doesn't re-wrap them either).
+
+## Code layout
+
+| File | Contents |
+|------|----------|
+| `src/codec.rs` | hex/text formatting and send parsing |
+| `src/link.rs` | serial, TCP client and TCP server (a reader thread each), and break |
+| `src/term.rs` | terminal emulation (vt100), live-key encoding, plain-text cleaner and transcript |
+| `src/macros.rs` | macro keys and the step runner |
+| `src/menu.rs` | the F1 menu: items, descriptions, search |
+| `src/clip.rs` | clipboard (in-memory during tests) |
+| `src/monitor.rs` | monitor state: raw log grouping, sending, live keys, hidden send, macros |
+| `src/monitor/view.rs`, `src/monitor/keys.rs` | panes, mouse, copy and paste / commands, the F1 menu and keys |
+| `src/ui_monitor.rs` | drawing the monitor: layouts and header |
+| `src/ui_monitor/panes.rs`, `src/ui_monitor/controls.rs` | drawing the raw log and terminal / the send box, footer, menu and help |
+| `src/app.rs`, `src/ui.rs` | start screen and app wiring |
+| `src/app/form.rs`, `src/app/setup.rs` | the start screen's keys and fields / its rows and connection settings |
+| `src/app/favourites.rs`, `src/ui/favourites.rs` | favourites: saving, editing, removing, `rawtap open` / their rows and dialog |
+| `src/app/connect.rs`, `src/app/update_prompt.rs` | connecting in the background / update checks and the Update Available dialog |
+| `src/extract.rs`, `src/logger.rs`, `src/config.rs` | image extraction, traffic log file, settings/state |
+| `src/paths.rs`, `src/json_store.rs` | where files live (and the move from 0.6.0's locations); atomic saves |
+| `src/session_log.rs`, `src/system_info.rs` | RawTap's own session log and panic hook; system info for bug reports |
+| `src/opener.rs`, `src/app/identity.rs` | opening files and folders; the app ID `info.brumley.rawtap` |
+| `src/switch_sim.rs`, `src/screen_tests.rs` | end-to-end test against a fake switch / screens drawn in a test terminal |
