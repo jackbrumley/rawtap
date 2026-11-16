@@ -118,7 +118,10 @@ saying why.
   Windows handed to Windows Terminal (Explorer, the updater's restart) starts
   itself again through `conhost.exe`, so it gets its own window, taskbar
   button and icon. The installers' Start menu shortcuts start RawTap through
-  `conhost.exe` directly. Started from a shell, RawTap stays in that terminal.
+  `conhost.exe` directly. A window started that way shows conhost's icon, so
+  RawTap puts its own on it (`WM_SETICON`), which the taskbar button shows.
+  Started from a shell, RawTap stays in that terminal and leaves its icon
+  alone.
 - `src/paths.rs`: every on-disk location, and the one-time move of 0.6.0's
   `rawtap_config.json` / `rawtap_state.json` from next to the executable.
 - `src/json_store.rs`: atomic JSON writes and the unparseable-file rule.
