@@ -27,12 +27,19 @@
 
     <Feature Id="Main" Title="RawTap">
       <Component Directory="INSTALLFOLDER">
-        <File Id="RawTapExe" Source="$(var.BinaryFile)" Name="rawtap.exe" KeyPath="yes">
-          <Shortcut Id="RawTapShortcut" Name="RawTap" Directory="ProgramMenuFolder"
-                    WorkingDirectory="INSTALLFOLDER" Icon="RawTapIcon" />
-        </File>
+        <File Id="RawTapExe" Source="$(var.BinaryFile)" Name="rawtap.exe" KeyPath="yes" />
         <Environment Id="RawTapPath" Name="PATH" Value="[INSTALLFOLDER]" Part="last"
                      Action="set" System="yes" Permanent="no" />
+      </Component>
+      <!-- The shortcut starts RawTap through the classic console host, so it
+           opens in its own window with its own taskbar button and icon, even
+           when Windows Terminal is the default terminal. -->
+      <Component Directory="ProgramMenuFolder">
+        <Shortcut Id="RawTapShortcut" Name="RawTap" Target="[System64Folder]conhost.exe"
+                  Arguments="&quot;[INSTALLFOLDER]rawtap.exe&quot;"
+                  WorkingDirectory="INSTALLFOLDER" Icon="RawTapIcon" />
+        <RegistryValue Root="HKLM" Key="Software\rawtap" Name="StartMenuShortcut"
+                       Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </Feature>
   </Package>

@@ -5,6 +5,7 @@
 ; Silent install / uninstall: /S. docs/install.ps1 runs it that way.
 
 Unicode true
+!include "x64.nsh"
 SetCompressor /SOLID lzma
 RequestExecutionLevel user
 
@@ -40,7 +41,13 @@ Section "Install"
   File "/oname=path-helper.ps1" "${PATH_HELPER}"
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
-  CreateShortcut "$SMPROGRAMS\${APP_NAME}.lnk" "$INSTDIR\rawtap.exe" "" "$INSTDIR\rawtap.ico"
+  ; The shortcut starts RawTap through the classic console host, so it opens in
+  ; its own window with its own taskbar button and icon, even when Windows
+  ; Terminal is the default terminal. conhost.exe is only in the 64-bit
+  ; System32, which this 32-bit installer sees only with redirection off.
+  ${DisableX64FSRedirection}
+  CreateShortcut "$SMPROGRAMS\${APP_NAME}.lnk" "$WINDIR\System32\conhost.exe" '"$INSTDIR\rawtap.exe"' "$INSTDIR\rawtap.ico"
+  ${EnableX64FSRedirection}
 
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "${APP_NAME}"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "${VERSION}"

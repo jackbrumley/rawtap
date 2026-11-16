@@ -10,6 +10,8 @@ mod macros;
 mod menu;
 mod monitor;
 mod opener;
+#[cfg(windows)]
+mod own_window;
 mod paths;
 #[cfg(test)]
 mod screen_tests;
@@ -275,8 +277,9 @@ fn wait_for_enter() {
 
 /// Everything before the TUI: the one-time move from 0.6.0's locations, the
 /// session log, then state and settings. `Err` stops RawTap without touching
-/// a file it couldn't read.
-fn start(cli: &Cli) -> Result<(App, bool), String> {
+/// a file it couldn't read. `early_note` is a problem from before the session
+/// log existed, to log and show on the start screen.
+fn start(cli: &Cli, early_note: Option<String>) -> Result<(App, bool), String> {
     let paths = paths::Paths::discover()?;
     let migrations = paths::migrate_legacy_files(&paths);
     session_log::init(&paths.debug_dir(), session_log::DEFAULT_LEVEL)?;
@@ -284,6 +287,10 @@ fn start(cli: &Cli) -> Result<(App, bool), String> {
     secrets::init();
 
     let mut notes = Vec::new();
+    if let Some(note) = early_note {
+        log::warn!("{note}");
+        notes.push(note);
+    }
     for migration in &migrations {
         match migration {
             paths::Migration::Moved { .. } => {
@@ -385,7 +392,18 @@ fn main() {
         return;
     }
 
-    let (mut app, direct) = start(&cli).unwrap_or_else(|error| fail_before_tui(&error));
+    // Before the session log starts, so a restart doesn't replace the last session's log.
+    #[cfg(windows)]
+    let own_window_note = match own_window::ensure() {
+        own_window::Outcome::Stay => None,
+        own_window::Outcome::Restarted => return,
+        own_window::Outcome::Failed(note) => Some(note),
+    };
+    #[cfg(not(windows))]
+    let own_window_note = None;
+
+    let (mut app, direct) =
+        start(&cli, own_window_note).unwrap_or_else(|error| fail_before_tui(&error));
     if direct {
         app.request_connect();
     }

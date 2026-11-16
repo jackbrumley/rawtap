@@ -114,6 +114,11 @@ saying why.
 - `src/main.rs`: panic hook, command line (clap), start-up (`start`: the
   move from 0.6.0's locations, the session log, state and settings), the
   TUI loop.
+- `src/own_window.rs`: Windows only. RawTap started in a new console that
+  Windows handed to Windows Terminal (Explorer, the updater's restart) starts
+  itself again through `conhost.exe`, so it gets its own window, taskbar
+  button and icon. The installers' Start menu shortcuts start RawTap through
+  `conhost.exe` directly. Started from a shell, RawTap stays in that terminal.
 - `src/paths.rs`: every on-disk location, and the one-time move of 0.6.0's
   `rawtap_config.json` / `rawtap_state.json` from next to the executable.
 - `src/json_store.rs`: atomic JSON writes and the unparseable-file rule.
