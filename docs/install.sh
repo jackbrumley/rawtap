@@ -121,15 +121,32 @@ acquire_root() {
   fi
 }
 
+# The process IDs from this script up to init. The in-app update runs this
+# script under RawTap: an AppImage's runtime (a process named rawtap) waits on
+# the updater, and closing it would hand the terminal back mid-update.
+ancestor_pids() {
+  local pid=$$ stat
+  while [[ -n "$pid" && "$pid" != "0" ]]; do
+    printf '%s\n' "$pid"
+    stat="$(cat "/proc/${pid}/stat" 2>/dev/null)" || break
+    # "pid (name) state ppid ...": the name may contain spaces and ")".
+    read -r _ pid _ <<<"${stat##*) }"
+  done
+}
+
+# Closes every running RawTap except the one this script runs under.
 stop_running_process() {
-  if optional_cmd pgrep && pgrep -x "$BIN_NAME" >/dev/null 2>&1; then
-    log "Closing running RawTap"
-    if optional_cmd pkill; then
-      pkill -TERM -x "$BIN_NAME" >/dev/null 2>&1 || true
-      sleep 1
-      pkill -KILL -x "$BIN_NAME" >/dev/null 2>&1 || true
-    fi
-  fi
+  optional_cmd pgrep || return 0
+  local ancestors running=()
+  ancestors="$(ancestor_pids)"
+  while read -r pid; do
+    [[ -n "$pid" ]] && ! grep -qx "$pid" <<<"$ancestors" && running+=("$pid")
+  done < <(pgrep -x "$BIN_NAME" 2>/dev/null)
+  [[ ${#running[@]} -gt 0 ]] || return 0
+  log "Closing running RawTap"
+  kill -TERM "${running[@]}" >/dev/null 2>&1 || true
+  sleep 1
+  kill -KILL "${running[@]}" >/dev/null 2>&1 || true
 }
 
 resolve_arch() {
