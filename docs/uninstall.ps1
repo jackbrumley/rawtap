@@ -32,8 +32,10 @@ $RegistryPaths = @(
 
 $found = $false
 foreach ($path in $RegistryPaths) {
+  # Exactly RawTap's own entry: other apps share the publisher, so never
+  # match on publisher alone or on a name prefix.
   $entries = Get-ItemProperty -Path $path -ErrorAction SilentlyContinue | Where-Object {
-    $_.DisplayName -and $_.DisplayName -like "RawTap*"
+    $_.DisplayName -eq "RawTap" -and $_.Publisher -eq "Jack Brumley"
   }
   foreach ($entry in $entries) {
     $found = $true
