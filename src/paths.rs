@@ -31,12 +31,6 @@ pub fn config_root() -> Result<PathBuf, String> {
     Ok(base.join(APP_DIR_NAME))
 }
 
-/// `~/.local/bin`, where install.sh puts the AppImage (Linux only).
-#[cfg(not(windows))]
-pub fn user_local_bin() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".local").join("bin"))
-}
-
 /// `~/.ssh`, where ssh looks for its keys (Windows: `%USERPROFILE%\\.ssh`).
 pub fn ssh_dir() -> Result<PathBuf, String> {
     Ok(dirs::home_dir()

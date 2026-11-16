@@ -3,7 +3,8 @@
 #   Tag push (vX.Y.Z): creates the pre-release (notes skeleton from
 #     release-notes-template.mjs), builds Linux and Windows in parallel,
 #     uploads each platform's assets, verifies the release is complete, then
-#     install-tests it with the installer scripts from the tag.
+#     install-tests it with the installer scripts from the tag, ending with
+#     the installed build's real in-app update (scripts/test-in-app-update.mjs).
 #     Promotion to latest stays a deliberate step: npm run release:promote.
 #   Manual run (Actions tab or `gh workflow run release.yml --ref <branch>`):
 #     a dry run that builds and packages all platforms and keeps the files as
@@ -172,6 +173,9 @@ jobs:
       RAWTAP_GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
 
       - name: Install .deb (system package)
         if: runner.os == 'Linux'
@@ -190,6 +194,18 @@ jobs:
           bash docs/install.sh --version "$TAG" --yes --no-relaunch --appimage
           "$HOME/.local/bin/rawtap" --version | grep -F "${TAG#v}"
           test -f "$HOME/.local/share/applications/info.brumley.rawtap.desktop"
+
+      # Runs the installed AppImage's real update path (--update) with this
+      # tag's update and install scripts, so a broken updater fails the
+      # release instead of stranding users on it. It updates to the latest
+      # published release, so it runs after the installs it would replace.
+      - name: In-app update (Linux)
+        if: runner.os == 'Linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          RAWTAP_UPDATE_BASE_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ needs.prepare.outputs.tag }}/docs
+          RAWTAP_NO_RELAUNCH: 1
+        run: node scripts/test-in-app-update.mjs "$HOME/.local/bin/rawtap"
 
       - name: Uninstall (Linux)
         if: runner.os == 'Linux'
@@ -227,6 +243,15 @@ jobs:
           if (Test-Path (Join-Path $env:ProgramFiles "rawtap\rawtap.exe")) { Write-Error "the MSI install is still there"; exit 1 }
           $userPath = (Get-Item "HKCU:\Environment").GetValue("Path", "", "DoNotExpandEnvironmentNames")
           if (($userPath -split ";") -notcontains $dir) { Write-Error "rawtap is not on the user PATH"; exit 1 }
+
+      # The same check for the setup.exe install (see the Linux step).
+      - name: In-app update (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          RAWTAP_UPDATE_BASE_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ needs.prepare.outputs.tag }}/docs
+          RAWTAP_NO_RELAUNCH: 1
+        run: node scripts/test-in-app-update.mjs "$LOCALAPPDATA/rawtap/rawtap.exe"
 
       - name: Uninstall (Windows)
         if: runner.os == 'Windows'

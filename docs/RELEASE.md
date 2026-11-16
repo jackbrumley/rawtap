@@ -57,6 +57,11 @@ Pushing the tag starts the **Release** workflow
 4. **Install test** installs the pre-release with the installer scripts from
    the tag: `.deb`, AppImage and uninstall on Linux; MSI, setup.exe and
    uninstall on Windows, checking `rawtap --version` and the PATH each time.
+   Before each uninstall it runs the installed build's real in-app update
+   (`rawtap --update`, through `scripts/test-in-app-update.mjs`) with the
+   tag's `update.sh` / `update.ps1`, which updates it to the latest
+   published release. A build whose updater cannot start fails here instead
+   of stranding its users.
 
 Follow it with:
 ```bash

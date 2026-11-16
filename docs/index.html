@@ -108,13 +108,13 @@
       "system": {
         "label": "System Install",
         "command": "curl --proto '=https' --tlsv1.2 -sSf https://brumley.info/rawtap/install.sh | bash",
-        "hint": "Open <strong>Terminal</strong> and run:",
+        "hint": "Open <strong>Terminal</strong> and run this to install. Run it again any time to update:",
         "note": "Installs the .deb (Debian, Ubuntu, Mint) or .rpm (Fedora), asks for your password, and adds you to the serial-port group."
       },
       "appimage": {
         "label": "AppImage",
         "command": "curl --proto '=https' --tlsv1.2 -sSf https://brumley.info/rawtap/install.sh | bash -s -- --appimage",
-        "hint": "Open <strong>Terminal</strong> and run:",
+        "hint": "Open <strong>Terminal</strong> and run this to install. Run it again any time to update:",
         "note": "Installs to ~/.local/bin/rawtap for any distro. Asks for your password once to add you to the serial-port group."
       },
       "uninstall": {
@@ -128,13 +128,13 @@
       "user": {
         "label": "User Install",
         "command": "irm https://brumley.info/rawtap/install.ps1 | iex",
-        "hint": "Open <strong>PowerShell</strong> or <strong>Windows Terminal</strong> and run:",
+        "hint": "Open <strong>PowerShell</strong> or <strong>Windows Terminal</strong> and run this to install. Run it again any time to update:",
         "note": "Installs just for you and adds rawtap to your PATH. No admin needed."
       },
       "system": {
         "label": "System Wide",
         "command": "irm https://brumley.info/rawtap/install-system.ps1 | iex",
-        "hint": "Open <strong>PowerShell as Administrator</strong> and run:",
+        "hint": "Open <strong>PowerShell as Administrator</strong> and run this to install. Run it again any time to update:",
         "note": "Installs the MSI for every user on this PC and adds rawtap to the system PATH."
       },
       "uninstall": {

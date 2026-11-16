@@ -1,14 +1,20 @@
 //! In-app updates, per the Release and Update Standard
 //! (https://github.com/jackbrumley/jackbrumley.github.io/blob/main/RELEASE_STANDARD.md),
-//! "Terminal apps": the check reads GitHub's latest release, and updating
-//! re-runs the same one-line installer a new user runs.
+//! section 7, "Terminal apps": the check reads GitHub's latest release, and
+//! the website owns the update. RawTap only downloads `docs/update.sh` or
+//! `docs/update.ps1` from the install site and runs it; that script runs the
+//! same installer a new user runs and starts RawTap again, so a fix to the
+//! update reaches every installed version without a release.
 //!
-//! - Linux: RawTap leaves the TUI and replaces itself with the installer in
-//!   the same terminal, so its output is visible; install.sh starts the new
-//!   version in that terminal. On failure the installed version starts again
-//!   with `--update-failed`.
-//! - Windows: a running exe can't be replaced, so the installer runs in its
-//!   own console window and RawTap exits; install.ps1 starts the new version.
+//! - Linux: RawTap leaves the TUI and replaces itself with the updater in the
+//!   same terminal, so its output is visible; update.sh starts the new
+//!   version in that terminal.
+//! - Windows: a running exe can't be replaced, so the updater runs in its own
+//!   console window and RawTap exits; update.ps1 starts the new version.
+//! - On failure the installed version starts again with `--update-failed`.
+//! - The hidden `--update` flag runs the update without a check; the release
+//!   install test uses it, with `RAWTAP_UPDATE_BASE_URL` set to the tag's
+//!   `docs/`.
 
 use serde::Deserialize;
 use std::sync::Mutex;
@@ -143,39 +149,77 @@ pub fn spawn_check() -> Receiver<Result<UpdateCheck, String>> {
     rx
 }
 
+/// Where the update scripts are downloaded from. `RAWTAP_UPDATE_BASE_URL`
+/// replaces it (https only); only the release install test sets it, to run
+/// the tag's own scripts.
+const UPDATE_BASE_URL: &str = INSTALL_SITE;
+const UPDATE_BASE_URL_OVERRIDE_VARIABLE: &str = "RAWTAP_UPDATE_BASE_URL";
+
+/// The first line `docs/update.sh` and `docs/update.ps1` print.
+#[cfg(test)]
+const UPDATE_STARTED_MARKER: &str = "[rawtap-update] started";
+
+/// Where to send the user when the updater can't even be downloaded.
+const RELEASES_PAGE: &str = "https://github.com/jackbrumley/rawtap/releases/latest";
+
+/// `debug/update.log`: the update scripts and the installers write it.
+fn update_log_path() -> Result<std::path::PathBuf, String> {
+    Ok(crate::paths::config_root()?
+        .join("debug")
+        .join("update.log"))
+}
+
 /// The message `--update-failed` shows.
 pub fn update_failed_message() -> String {
-    let log = crate::paths::config_root()
-        .map(|root| root.join("debug").join("update.log").display().to_string())
+    let log = update_log_path()
+        .map(|path| path.display().to_string())
         .unwrap_or_else(|_| "~/.config/rawtap/debug/update.log".to_string());
     format!(
         "RawTap could not install the update, so this version is still installed. Update log: {log}"
     )
 }
 
-/// Runs the update. Call it with the terminal back to normal (no TUI).
-/// On Linux this only returns on failure (the process becomes the
-/// installer); on Windows it returns once the installer window is started,
-/// and RawTap should then exit.
+/// Runs the update (Release Standard section 7: the website owns the
+/// update). RawTap only downloads `<site>/update.sh` or `update.ps1` and runs
+/// it; everything else, from the installer options to starting RawTap again,
+/// is in that script, so a fix there reaches every installed version.
+///
+/// Call it with the terminal back to normal (no TUI). On Linux this only
+/// returns on failure (the process becomes the updater, in this terminal);
+/// on Windows it returns once the updater's window is started, and RawTap
+/// should then exit so the installer can replace rawtap.exe.
 pub fn run_update() -> Result<(), String> {
-    log::info!("Starting the update");
-    platform::run_update()
+    let base_url = parse_update_base_url(std::env::var(UPDATE_BASE_URL_OVERRIDE_VARIABLE).ok())?;
+    let relaunch = relaunch_target()
+        .ok_or("Could not find RawTap's own executable, to start it again after the update")?;
+    let log = update_log_path()?;
+    log::info!("Starting the updater from {base_url}");
+    log::logger().flush();
+    platform::start_updater(&base_url, &relaunch, &log)
 }
 
-/// The executable to start again with `--update-failed`: the AppImage file
-/// itself when running as one (its mounted executable disappears on exit).
+/// The default base URL, or the override, which must be https and loses any
+/// trailing slash.
+fn parse_update_base_url(override_url: Option<String>) -> Result<String, String> {
+    let Some(override_url) = override_url else {
+        return Ok(UPDATE_BASE_URL.to_string());
+    };
+    let trimmed = override_url.trim().trim_end_matches('/');
+    if !trimmed.starts_with("https://") {
+        return Err(format!(
+            "{UPDATE_BASE_URL_OVERRIDE_VARIABLE} must be an https:// URL, got '{override_url}'"
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// The executable to start again after the update: the AppImage file itself
+/// when running as one (its mounted executable disappears on exit).
 fn relaunch_target() -> Option<std::path::PathBuf> {
     if let Some(appimage) = std::env::var_os("APPIMAGE") {
         return Some(std::path::PathBuf::from(appimage));
     }
     std::env::current_exe().ok()
-}
-
-/// Wraps `value` in single quotes for bash, which takes everything inside
-/// literally (an embedded quote closes, escapes and reopens).
-#[cfg(any(not(windows), test))]
-fn bash_single_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', r"'\''"))
 }
 
 /// Wraps `value` in single quotes for PowerShell, which escapes an embedded
@@ -185,117 +229,79 @@ fn powershell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
 
-/// The install command that replaces this installation: an AppImage install
-/// (`$APPIMAGE` set, or the binary under `~/.local/bin`) stays an AppImage
-/// install.
-#[cfg(any(not(windows), test))]
-fn unix_update_command(is_appimage: bool) -> String {
-    let base = format!("curl --proto '=https' --tlsv1.2 -sSf {INSTALL_SITE}/install.sh | bash");
-    if is_appimage {
-        format!("{base} -s -- --appimage")
-    } else {
-        base
-    }
-}
-
-/// Runs the installer; if it fails, starts the installed version again with
-/// `--update-failed` so the user is told. `pipefail` makes a failed download
-/// fail the update rather than piping an empty script into bash.
-#[cfg(any(not(windows), test))]
-fn unix_update_script(is_appimage: bool, relaunch: Option<&std::path::Path>) -> String {
-    let relaunch = match relaunch {
-        Some(path) => {
-            let path = bash_single_quote(&path.to_string_lossy());
-            format!("if [ -x {path} ]; then exec {path} --update-failed; fi")
-        }
-        None => "echo \"[rawtap] No installed version found to start again\"".to_string(),
-    };
-    format!(
-        r#"set -o pipefail
-{install}
-status=$?
-if [ "$status" -ne 0 ]; then
-  echo "[rawtap] Update failed (exit $status); starting the installed version again"
-  {relaunch}
-fi
-"#,
-        install = unix_update_command(is_appimage),
-    )
-}
-
-/// Windows counterpart of `unix_update_script`. install.ps1 runs from a file
-/// rather than through `iex`, so its `exit 1` on failure ends the script, not
-/// this updater, and sets `$LASTEXITCODE`.
-#[cfg(any(windows, test))]
-fn windows_update_script(relaunch: Option<&std::path::Path>) -> String {
-    let relaunch = match relaunch {
-        Some(path) => {
-            let path = powershell_single_quote(&path.to_string_lossy());
-            format!(
-                "if (Test-Path -LiteralPath {path}) {{ Start-Process -FilePath {path} -ArgumentList '--update-failed' }}"
-            )
-        }
-        None => "Write-Output '[rawtap] No installed version found to start again'".to_string(),
-    };
-    format!(
-        r#"$installer = Join-Path $env:TEMP 'rawtap-update-install.ps1'
-try {{
-  Invoke-RestMethod -Uri '{INSTALL_SITE}/install.ps1' -OutFile $installer -ErrorAction Stop
-  $LASTEXITCODE = 0
-  & $installer
-  $succeeded = $LASTEXITCODE -eq 0
-}} catch {{
-  Write-Output "[rawtap] ERROR: $_"
-  $succeeded = $false
-}}
-if (-not $succeeded) {{
-  Write-Output '[rawtap] Update failed; starting the installed version again'
-  {relaunch}
-  Read-Host 'Press Enter to close'
-}}
-"#
-    )
-}
-
 #[cfg(not(windows))]
 mod platform {
-    use super::*;
+    use std::os::unix::process::CommandExt;
+    use std::path::Path;
 
-    fn is_appimage() -> bool {
-        if std::env::var_os("APPIMAGE").is_some() {
-            return true;
-        }
-        matches!(
-            (std::env::current_exe(), crate::paths::user_local_bin()),
-            (Ok(exe), Some(dir)) if exe.starts_with(&dir)
-        )
-    }
+    /// Downloads update.sh and replaces itself with it, in this terminal. The
+    /// URL and paths are positional arguments, never shell code. A failed
+    /// download says so (on screen and in the update log) and starts this
+    /// version again with `--update-failed`, so RawTap never closes into
+    /// nothing.
+    const LAUNCHER: &str = r#"if ! updater="$(curl --proto '=https' --tlsv1.2 -fsSL --retry 3 --connect-timeout 10 "$1/update.sh")"; then
+  message="[rawtap-update] Could not download $1/update.sh, so nothing was changed. Download the new version from $4 instead."
+  printf '%s\n' "$message"
+  mkdir -p "$(dirname "$3")" 2>/dev/null && printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$message" > "$3"
+  [ "${RAWTAP_NO_RELAUNCH:-}" = 1 ] && exit 1
+  exec "$2" --update-failed
+fi
+exec bash -c "$updater" rawtap-update --base-url "$1" --relaunch "$2"
+"#;
 
-    /// Replaces this process with the update script, in this terminal.
-    pub fn run_update() -> Result<(), String> {
-        use std::os::unix::process::CommandExt;
-        let script = unix_update_script(is_appimage(), relaunch_target().as_deref());
-        log::info!("Running the update:\n{script}");
-        log::logger().flush();
+    pub fn start_updater(base_url: &str, relaunch: &Path, log: &Path) -> Result<(), String> {
         let error = std::process::Command::new("bash")
             .arg("-c")
-            .arg(script)
+            .arg(LAUNCHER)
+            .arg("rawtap-update")
+            .arg(base_url)
+            .arg(relaunch)
+            .arg(log)
+            .arg(super::RELEASES_PAGE)
             .exec();
-        Err(format!("Could not start the update: {error}"))
+        Err(format!("Could not start the updater: {error}"))
     }
 }
 
 #[cfg(windows)]
 mod platform {
-    use super::*;
+    use super::powershell_single_quote;
+    use std::path::Path;
 
-    /// Starts the update in its own console window; RawTap then exits so the
-    /// installer can replace rawtap.exe.
-    pub fn run_update() -> Result<(), String> {
+    /// Starts PowerShell in a console window of its own, so the update's
+    /// output stays visible after RawTap exits. It downloads update.ps1 and
+    /// runs it as a script block. A failed download says so (in the window
+    /// and the update log), starts this version again with `--update-failed`
+    /// and keeps the window open, so RawTap never closes into nothing.
+    pub fn start_updater(base_url: &str, relaunch: &Path, log: &Path) -> Result<(), String> {
         use std::os::windows::process::CommandExt;
         const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
-        let script = windows_update_script(relaunch_target().as_deref());
-        log::info!("Running the update:\n{script}");
+
+        let script = format!(
+            r#"[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+try {{
+  $updater = Invoke-RestMethod -Uri {script_url} -ErrorAction Stop
+}} catch {{
+  $message = '[rawtap-update] Could not download ' + {script_url} + ', so nothing was changed. Download the new version from ' + {releases} + " instead. ($_)"
+  Write-Output $message
+  try {{
+    New-Item -ItemType Directory -Force -Path (Split-Path {log}) | Out-Null
+    Set-Content -LiteralPath {log} -Value $message
+  }} catch {{}}
+  if ($env:RAWTAP_NO_RELAUNCH -ne '1') {{
+    Start-Process -FilePath {relaunch} -ArgumentList '--update-failed'
+    Read-Host 'Press Enter to close'
+  }}
+  exit 1
+}}
+& ([scriptblock]::Create($updater)) -BaseUrl {base_url} -Relaunch {relaunch}
+"#,
+            script_url = powershell_single_quote(&format!("{base_url}/update.ps1")),
+            releases = powershell_single_quote(super::RELEASES_PAGE),
+            log = powershell_single_quote(&log.to_string_lossy()),
+            base_url = powershell_single_quote(base_url),
+            relaunch = powershell_single_quote(&relaunch.to_string_lossy()),
+        );
         std::process::Command::new("powershell.exe")
             .args([
                 "-NoProfile",
@@ -307,7 +313,7 @@ mod platform {
             .creation_flags(CREATE_NEW_CONSOLE)
             .spawn()
             .map(|_| ())
-            .map_err(|error| format!("Could not start the update: {error}"))
+            .map_err(|error| format!("Could not start the updater: {error}"))
     }
 }
 
@@ -331,16 +337,6 @@ fn parse_version(value: &str) -> Option<(u64, u64, u64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
-
-    #[test]
-    fn bash_quoting_keeps_paths_literal() {
-        assert_eq!(bash_single_quote("/usr/bin/rawtap"), "'/usr/bin/rawtap'");
-        assert_eq!(
-            bash_single_quote("/home/o'brien/Raw Tap $HOME.AppImage"),
-            r"'/home/o'\''brien/Raw Tap $HOME.AppImage'"
-        );
-    }
 
     #[test]
     fn powershell_quoting_doubles_embedded_quotes() {
@@ -359,24 +355,42 @@ mod tests {
     }
 
     #[test]
-    fn unix_update_script_fails_on_a_failed_download_and_relaunches() {
-        let script = unix_update_script(false, Some(Path::new("/usr/bin/rawtap")));
-        assert!(script.starts_with("set -o pipefail\n"));
-        assert!(script.contains("https://brumley.info/rawtap/install.sh | bash\n"));
-        assert!(script.contains("exec '/usr/bin/rawtap' --update-failed"));
+    fn update_base_url_defaults_to_the_website() {
+        assert_eq!(
+            parse_update_base_url(None).unwrap(),
+            "https://brumley.info/rawtap"
+        );
     }
 
     #[test]
-    fn appimage_install_stays_an_appimage_install() {
-        let script = unix_update_script(true, None);
-        assert!(script.contains("install.sh | bash -s -- --appimage"));
+    fn update_base_url_override_must_be_https() {
+        assert_eq!(
+            parse_update_base_url(Some(
+                "https://raw.githubusercontent.com/jackbrumley/rawtap/v1.2.3/docs/".to_string()
+            ))
+            .unwrap(),
+            "https://raw.githubusercontent.com/jackbrumley/rawtap/v1.2.3/docs"
+        );
+        assert!(parse_update_base_url(Some("http://example.com".to_string())).is_err());
     }
 
+    /// The scripts' first output is the started line: their contract with
+    /// every shipped version and with the release install test.
     #[test]
-    fn windows_update_script_runs_the_installer_from_a_file_and_relaunches() {
-        let script = windows_update_script(Some(Path::new(r"C:\rawtap\rawtap.exe")));
-        assert!(script.contains("https://brumley.info/rawtap/install.ps1"));
-        assert!(script.contains("& $installer"));
-        assert!(script.contains("--update-failed"));
+    fn update_scripts_print_the_started_marker_first() {
+        let first_output = |script: &str, command: &str| {
+            script
+                .lines()
+                .find(|line| line.starts_with(command))
+                .map(str::to_string)
+        };
+        assert_eq!(
+            first_output(include_str!("../docs/update.ps1"), "Say "),
+            Some(format!("Say \"{UPDATE_STARTED_MARKER}\""))
+        );
+        assert_eq!(
+            first_output(include_str!("../docs/update.sh"), "say "),
+            Some(format!("say \"{UPDATE_STARTED_MARKER}\""))
+        );
     }
 }

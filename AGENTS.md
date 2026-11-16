@@ -128,7 +128,8 @@ saying why.
   `rawtap --system-info`.
 - `src/opener.rs`: opening a file or folder (Notepad / Explorer on Windows,
   `xdg-open` on Linux).
-- `src/update.rs`: the update check and running the installer.
+- `src/update.rs`: the update check and starting the website's update
+  script (`docs/update.sh`, `docs/update.ps1`).
 - `src/app/identity.rs`: `APP_ID` and its tests; the launcher is
   `packaging/info.brumley.rawtap.desktop` (`Terminal=true`).
 - `src/app.rs`, `src/ui.rs`: the start screen and app wiring.
@@ -165,9 +166,10 @@ saying why.
   macros, menu items, clipboard, image extraction, the traffic log, config.
 - `src/switch_sim.rs`: end-to-end test against a fake Cisco-style switch;
   `src/screen_tests.rs`: screens drawn into a test terminal.
-- `scripts/`: the file size check (`check-file-lines.mjs`) and the release
+- `scripts/`: the file size check (`check-file-lines.mjs`), the release
   tooling (`release:*` npm scripts; asset names only from
-  `release-assets.mjs`).
+  `release-assets.mjs`) and the release install test's in-app update check
+  (`test-in-app-update.mjs`).
 - `packaging/`: the launcher (`info.brumley.rawtap.desktop`), icons
   (`icons/rawtap.svg` is the source; the PNGs and `rawtap.ico` are rendered
   from it), the Linux build container (`linux/`) and the Windows installers
@@ -181,7 +183,8 @@ saying why.
   and "Other apps" footer from `https://brumley.info/shared/v1/`, App
   Standard "Install Page"; `assets/icon.png`), the one-line installers
   (`install.sh`, `uninstall.sh`, `install.ps1`, `install-system.ps1`,
-  `uninstall.ps1`), `RELEASE.md` and `TODO.md`. Promotion to `main` deploys
+  `uninstall.ps1`), the in-app updater's scripts (`update.sh`,
+  `update.ps1`), `RELEASE.md` and `TODO.md`. Promotion to `main` deploys
   them.
 
 ## Variations
@@ -229,13 +232,26 @@ saying why.
   Voquill: Later, View Release Notes, Update Now) once a run, as soon as
   nothing else needs the keyboard (not over live keys, a hidden send, a
   paste confirmation, a macro or the F1 menu). After "Later": Ctrl+U on the
-  start screen, F1 → Updates, or `rawtap update`. Linux: after the TUI closes, RawTap replaces
-  itself (`exec`) with the update script in the same terminal; install.sh
-  then starts the new version on `/dev/tty`. Windows: the update runs in its
-  own console window (`CREATE_NEW_CONSOLE`, not detached, so its output is
-  visible) and RawTap exits; install.ps1 starts the new version. The update
-  script's output goes to the terminal; install.sh / install.ps1 write
-  `debug/update.log` themselves.
+  start screen, F1 → Updates, or `rawtap update`.
+- **The website owns the update:** RawTap only downloads
+  `<site>/update.sh` or `<site>/update.ps1` and runs it; the script runs
+  install.sh / install.ps1, starts the new version, and on failure starts
+  the installed version with `--update-failed`. A fix to the update ships by
+  changing that script, with no release. Each script's parameters and
+  output lines (documented at its top; a unit test keeps the started line in
+  sync) are a contract with every shipped version: change them only
+  compatibly. Linux: after the TUI closes, RawTap replaces itself (`exec`)
+  with the updater in the same terminal, and update.sh starts the new
+  version on `/dev/tty`. Windows: the updater runs in its own console window
+  (`CREATE_NEW_CONSOLE`, not detached, so its output is visible) and RawTap
+  exits; update.ps1 starts the new version through `conhost.exe`. If the
+  script itself can't be downloaded, the launcher says so and starts the
+  installed version with `--update-failed`, so RawTap never closes into
+  nothing. Output goes to the terminal; the update script and the installers
+  also write `debug/update.log`. The hidden `--update` flag runs the update
+  without a check; the release install test runs it on every platform, with
+  `RAWTAP_UPDATE_BASE_URL` (https only) set to the tag's `docs/` and
+  `RAWTAP_NO_RELAUNCH=1`.
 - **Install modes:** install.sh adds the user to the serial-port group
   (`dialout`, or `uucp` on Arch) in both modes, instead of a udev rule.
   install.ps1's user install is the NSIS `setup.exe` in

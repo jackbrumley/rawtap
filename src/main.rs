@@ -48,6 +48,9 @@ struct Cli {
     /// Set by the updater when an update failed: say so on the start screen
     #[arg(long, hide = true)]
     update_failed: bool,
+    /// Run the updater now, without a check (the release install test)
+    #[arg(long, hide = true)]
+    update: bool,
 }
 
 #[derive(Subcommand)]
@@ -376,6 +379,11 @@ fn main() {
         return;
     }
 
+    if cli.update {
+        run_update();
+        return;
+    }
+
     if let Some(Cmd::Update) = cli.cmd {
         update_command();
         return;
@@ -446,7 +454,7 @@ fn main() {
             );
         }
         // Voquill's wording (Release Standard section 7).
-        println!("Starting update... RawTap will restart shortly.");
+        println!("Starting the updater. RawTap will close, install the update and reopen.");
         run_update();
     }
 }
