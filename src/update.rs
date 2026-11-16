@@ -310,6 +310,11 @@ try {{
                 "-Command",
                 &script,
             ])
+            // Windows PowerShell builds its own module path when none is set.
+            // An inherited one (RawTap started from Git Bash, say, with
+            // PowerShell 7's module folders on it) makes it load PowerShell
+            // 7's modules, which fail, so install.ps1 can't find Get-FileHash.
+            .env_remove("PSModulePath")
             .creation_flags(CREATE_NEW_CONSOLE)
             .spawn()
             .map(|_| ())
