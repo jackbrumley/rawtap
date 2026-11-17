@@ -136,7 +136,13 @@ saying why.
 - `src/update.rs`: the update check and starting the website's update
   script (`docs/update.sh`, `docs/update.ps1`).
 - `src/app/identity.rs`: `APP_ID` and its tests; the launcher is
-  `packaging/info.brumley.rawtap.desktop` (`Terminal=true`).
+  `packaging/info.brumley.rawtap.desktop` (`Exec=rawtap --own-window`,
+  `Terminal=false`, `StartupWMClass` = the app ID).
+- `src/linux_window.rs`: Linux only. `--own-window` (the launcher's)
+  opens RawTap in the desktop's terminal (Cinnamon's or GNOME's setting,
+  then `x-terminal-emulator`, then common ones) with the window class set
+  to the app ID and a 140×42 size, so the taskbar shows RawTap's icon, not
+  the terminal's. With no terminal at all it says why with `notify-send`.
 - `src/app.rs`, `src/ui.rs`: the start screen and app wiring. In a short
   window the connection panel's detected ports list gives way first
   ("… and N more"), so the keys, errors and notes under it always show.

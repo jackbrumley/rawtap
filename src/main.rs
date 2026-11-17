@@ -5,6 +5,8 @@ mod config;
 mod extract;
 mod json_store;
 mod link;
+#[cfg(target_os = "linux")]
+mod linux_window;
 mod logger;
 mod macros;
 mod menu;
@@ -51,6 +53,10 @@ struct Cli {
     /// Run the updater now, without a check (the release install test)
     #[arg(long, hide = true)]
     update: bool,
+    /// Open in a terminal window of RawTap's own (the app menu's launcher)
+    #[cfg(target_os = "linux")]
+    #[arg(long, hide = true)]
+    own_window: bool,
 }
 
 #[derive(Subcommand)]
@@ -407,7 +413,20 @@ fn main() {
         own_window::Outcome::Restarted => return,
         own_window::Outcome::Failed(note) => Some(note),
     };
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    let own_window_note = match cli.own_window.then(linux_window::ensure) {
+        None | Some(linux_window::Outcome::Stay) => None,
+        Some(linux_window::Outcome::Started) => return,
+        Some(linux_window::Outcome::Failed(note)) => {
+            use std::io::IsTerminal;
+            if !std::io::stdin().is_terminal() {
+                linux_window::report_without_terminal(&note);
+                std::process::exit(1);
+            }
+            Some(note)
+        }
+    };
+    #[cfg(not(any(windows, target_os = "linux")))]
     let own_window_note = None;
 
     let (mut app, direct) =

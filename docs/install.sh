@@ -433,9 +433,10 @@ else
 Type=Application
 Name=RawTap
 Comment=See and send raw serial and TCP data, in hex and text
-Exec=${appimage_path}
+Exec=${appimage_path} --own-window
 Icon=${BIN_NAME}
-Terminal=true
+Terminal=false
+StartupWMClass=${APP_ID}
 Categories=Development;Utility;
 Keywords=serial;tcp;console;hex;terminal;switch;
 StartupNotify=false

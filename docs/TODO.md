@@ -10,7 +10,9 @@ the Release and Update Standard (see `AGENTS.md`).
 
 ## Next
 
-- Nothing queued.
+- **Hand-test the Linux taskbar icon** once a release carries the new
+  launcher (`Exec=rawtap --own-window`, `StartupWMClass`): open RawTap
+  from the Mint menu and check the taskbar shows RawTap's icon.
 
 ## Ideas / Parking Lot
 

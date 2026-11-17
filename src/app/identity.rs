@@ -18,10 +18,13 @@ mod tests {
     }
 
     #[test]
-    fn launcher_is_named_after_the_app_id_and_runs_in_a_terminal() {
+    fn launcher_is_named_after_the_app_id_and_opens_rawtaps_own_window() {
         let launcher = launcher();
-        assert!(launcher.contains("\nExec=rawtap\n"));
-        assert!(launcher.contains("\nTerminal=true\n"));
+        // RawTap opens its own terminal window, whose class is the app ID,
+        // so the taskbar shows the launcher's icon (src/linux_window.rs).
+        assert!(launcher.contains("\nExec=rawtap --own-window\n"));
+        assert!(launcher.contains("\nTerminal=false\n"));
+        assert!(launcher.contains(&format!("\nStartupWMClass={APP_ID}\n")));
         assert!(launcher.contains("\nIcon=rawtap\n"));
     }
 
