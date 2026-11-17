@@ -14,7 +14,15 @@ use ratatui::{
     widgets::{Block, Clear, Paragraph, Wrap},
 };
 
+/// Quiet text on a screen with nothing in front of it. It's also what
+/// everything behind a dialog or the menu turns (`dim`), so a dialog never
+/// uses it: see `POPUP_DIM`.
 pub const DIM: Style = Style::new().fg(Color::DarkGray);
+
+/// Secondary text inside a dialog or the menu (hints, keys, notes): lighter
+/// than DIM, so it never blends into the dimmed screen behind. A dialog's
+/// key hints on its bottom border take the border's colour instead.
+pub const POPUP_DIM: Style = Style::new().fg(Color::Gray);
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     match app.screen {
@@ -148,7 +156,7 @@ fn draw_update_prompt(f: &mut Frame, prompt: &UpdatePrompt, over: Rect) {
         )))
         .title_bottom(Line::from(Span::styled(
             " ←→ choose  Enter select  Esc later ",
-            DIM,
+            Style::new().fg(Color::Green),
         )))
         .border_style(Style::new().fg(Color::Green));
     f.render_widget(Paragraph::new(lines).block(block), area);

@@ -161,3 +161,56 @@ fn favourites_new_connection_save_edit_and_remove() {
     assert_eq!(reloaded.connection.tcp_port, "9100");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Log to file is in Connection options and remembered per connection: one
+/// connection turned off leaves the others on the setting for every one.
+#[test]
+fn log_to_file_is_remembered_per_connection() {
+    use app::setup::Field;
+    let dir = std::env::temp_dir().join(format!("rawtap_logopt_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let paths = paths::Paths::at(dir.clone());
+    let (cfg, _) = config::load(&paths).unwrap();
+    let saved = config::Saved {
+        connection: config::Connection {
+            mode: ConnMode::Telnet,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    assert!(saved.logging);
+    let mut app = App::new(cfg, paths, saved, Vec::new(), true);
+    key(&mut app, KeyCode::Enter); // New connection
+    fill_host_and_port(&mut app, "10.0.0.9", ""); // the port is already 23
+    let panel = app.setup.panel.as_mut().unwrap();
+    assert!(
+        !panel.fields().contains(&Field::Logging),
+        "only under Options"
+    );
+    panel.options_open = true;
+    panel.move_focus(
+        panel
+            .fields()
+            .iter()
+            .position(|f| *f == Field::Logging)
+            .unwrap(),
+    );
+    let panel = app.setup.panel.as_ref().unwrap();
+    assert_eq!(app.field_value(panel, Field::Logging), "Yes");
+    key(&mut app, KeyCode::Right);
+    let panel = app.setup.panel.as_ref().unwrap();
+    assert_eq!(app.field_value(panel, Field::Logging), "No");
+    assert_eq!(
+        app.saved.profiles["telnet:10.0.0.9:23"].logging,
+        Some(false)
+    );
+    // Another host still follows the setting for every connection.
+    let other = config::Connection {
+        mode: ConnMode::Telnet,
+        telnet_host: "10.0.0.10".into(),
+        ..Default::default()
+    };
+    assert!(app.logs_connection(&other));
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -64,8 +64,8 @@ impl Field {
             Field::SshHost => "Host / IP",
             Field::SshUser => "User",
             Field::SshPort => "SSH port",
-            Field::Logging => "Log to file",
-            Field::Options => "Options",
+            Field::Logging => "  Log to file",
+            Field::Options => "Connection options",
             Field::OptLineEnding => "  Line ending",
             Field::OptCharDelay => "  Char delay",
             Field::OptSendMode => "  Send mode",
@@ -118,10 +118,10 @@ impl Field {
             }
             Field::SshPort => "Usually 22.",
             Field::Logging => {
-                "Write a hex log and a plain-text transcript of the session to the logs folder."
+                "Write a hex log and a plain-text transcript of this connection's sessions to the logs folder."
             }
             Field::Options => {
-                "Settings remembered for this port or host. ←→ or Enter to show / hide them. They can also be changed any time from the F1 menu."
+                "Settings remembered for this port or host. ←→ or Enter to show / hide them. They can also be changed any time from F1 → Connection options."
             }
             Field::OptLineEnding => crate::menu::line_ending_desc(),
             Field::OptCharDelay => crate::menu::char_delay_desc(),
@@ -324,7 +324,6 @@ impl Setup {
             ConnMode::Telnet => f.extend([Field::TelnetHost, Field::TelnetPort]),
             ConnMode::Ssh => f.extend([Field::SshHost, Field::SshUser, Field::SshPort]),
         }
-        f.push(Field::Logging);
         f.push(Field::Options);
         if options_open {
             f.extend([
@@ -332,6 +331,7 @@ impl Setup {
                 Field::OptCharDelay,
                 Field::OptSendMode,
                 Field::OptLayout,
+                Field::Logging,
             ]);
         }
         f

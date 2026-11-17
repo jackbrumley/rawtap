@@ -3,6 +3,7 @@
 
 mod keys;
 pub(crate) mod password;
+mod recording;
 mod view;
 
 use crate::codec;
@@ -43,8 +44,8 @@ pub enum Dir {
 pub enum EntryKind {
     Rx(Vec<u8>),
     Tx(Vec<u8>),
-    /// A send kept out of the log (password). Only the length is kept.
-    TxHidden(usize),
+    /// A send kept out of the log (password): not even its length is kept.
+    TxHidden,
     Info(String),
     Good(String),
     Error(String),
@@ -179,6 +180,11 @@ pub struct Monitor {
     pub secret: Option<Vec<char>>,
     /// Whether the hidden box sends or remembers.
     pub secret_use: password::SecretUse,
+    /// F1 → Name this session log: the name being typed.
+    pub log_name: Option<String>,
+    /// Where the header drew the recording badge, for a click (opens the
+    /// session logs folder).
+    pub rec_badge: Option<Rect>,
     /// This connection's remembered password (OS keyring).
     remembered: password::Remembered,
 
@@ -263,6 +269,8 @@ impl Monitor {
             silent_since: None,
             secret: None,
             secret_use: password::SecretUse::Send,
+            log_name: None,
+            rec_badge: None,
             remembered: password::Remembered::default(),
             macros,
             run: None,
@@ -478,7 +486,7 @@ impl Monitor {
         let kind = match (p.dir, p.hidden) {
             (Dir::Rx, _) => EntryKind::Rx(p.data),
             (Dir::Tx, false) => EntryKind::Tx(p.data),
-            (Dir::Tx, true) => EntryKind::TxHidden(p.data.len()),
+            (Dir::Tx, true) => EntryKind::TxHidden,
         };
         self.next_id += 1;
         let mut e = Entry {
@@ -727,6 +735,9 @@ impl Monitor {
             Ok(()) => {
                 self.tx_bytes += data.len() as u64;
                 self.traffic(Dir::Tx, hidden, &data);
+                if hidden && self.logger.is_some() {
+                    self.set_status("Password prompt: what you type isn't recorded", false);
+                }
             }
             Err(e) => self.push(EntryKind::Error(format!("Send failed: {e}"))),
         }
@@ -739,8 +750,12 @@ impl Monitor {
             Err(e) => self.set_status(e, true),
             Ok(bytes) if bytes.is_empty() => self.set_status("Nothing to send", true),
             Ok(bytes) => {
-                if self.send_bytes(bytes, false) {
-                    if !text.is_empty() {
+                // At a password prompt: logged as <hidden>, not kept in history.
+                let hidden = self.at_password_prompt();
+                if self.send_bytes(bytes, hidden) {
+                    if hidden {
+                        self.set_status("Password sent (not recorded, not in history)", false);
+                    } else if !text.is_empty() {
                         let dup = self
                             .history
                             .last()

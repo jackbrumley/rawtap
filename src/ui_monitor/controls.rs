@@ -47,17 +47,18 @@ pub(super) fn draw_input(f: &mut Frame, m: &Monitor, area: Rect) {
                 placeholder,
                 Some(s.len()),
             )
-        } else if m.live {
+        } else if let Some(name) = &m.log_name {
             (
                 Line::from(vec![
                     Span::raw(" "),
-                    badge(" LIVE KEYS ".into(), Color::Magenta),
-                    Span::raw(format!(" Enter sends {le} ")),
+                    badge(" NAME THIS SESSION LOG ".into(), Color::Cyan),
+                    Span::raw(" "),
                 ]),
-                Line::from(""),
-                String::new(),
-                "Every key goes straight to the device. F4 to stop.",
-                None,
+                Line::from(Span::styled(" Enter renames · Esc keeps its name ", DIM))
+                    .right_aligned(),
+                name.clone(),
+                "Type a name, e.g. core switch config",
+                Some(name.chars().count()),
             )
         } else {
             let mode_bg = match m.profile.input_mode {
@@ -108,19 +109,30 @@ pub(super) fn draw_input(f: &mut Frame, m: &Monitor, area: Rect) {
                 InputMode::Hex => "Type hex bytes (e.g. 02 41 30 03) and press Enter",
                 InputMode::Ascii => "Type a command and press Enter",
             };
-            (
-                Line::from(t),
-                preview,
-                m.input_text(),
-                placeholder,
-                Some(m.cursor),
-            )
+            // At a password prompt the box hides what's typed, and the
+            // send is logged as <hidden> and kept out of history.
+            if m.at_password_prompt() {
+                t.push(badge(" PASSWORD · not recorded ".into(), Color::Red));
+                (
+                    Line::from(t),
+                    Line::from(""),
+                    "•".repeat(m.input.len()),
+                    "Type the password and press Enter",
+                    Some(m.cursor),
+                )
+            } else {
+                (
+                    Line::from(t),
+                    preview,
+                    m.input_text(),
+                    placeholder,
+                    Some(m.cursor),
+                )
+            }
         };
 
     let border = if m.secret.is_some() {
         Color::Red
-    } else if m.live {
-        Color::Magenta
     } else if m.connected {
         Color::Cyan
     } else {
@@ -296,7 +308,7 @@ pub(super) fn draw_help(f: &mut Frame) {
         ),
         l("  --no-log  skip log files"),
         l(""),
-        Line::from(Span::styled("  Any key closes this.", DIM)),
+        Line::from(Span::styled("  Any key closes this.", crate::ui::POPUP_DIM)),
     ];
     let block = Block::bordered()
         .title(" Keyboard shortcuts & send syntax ")

@@ -147,8 +147,11 @@ saying why.
   window the connection panel's detected ports list gives way first
   ("… and N more"), so the keys, errors and notes under it always show.
 - `src/monitor.rs`: the monitor's state (raw log, terminal, send box,
-  macros); `src/monitor/view.rs` (panes, mouse, copy and paste) and
-  `src/monitor/keys.rs` (commands, the F1 menu, keys).
+  macros); `src/monitor/view.rs` (panes, mouse, copy and paste),
+  `src/monitor/keys.rs` (commands, the F1 menu, keys) and
+  `src/monitor/recording.rs` (the session log: on/off per connection,
+  naming it, opening it, its transcript and their folder; the header's
+  ● REC badge opens the folder).
 - `src/ui_monitor.rs`: drawing the monitor; `src/ui_monitor/panes.rs` (raw
   log and terminal), `src/ui_monitor/controls.rs` (send box, footer, help)
   and `src/ui_monitor/menu_popup.rs` (the F1 menu: sections, an open

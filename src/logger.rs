@@ -9,13 +9,16 @@ use std::path::{Path, PathBuf};
 pub struct Logger {
     file: File,
     pub path: PathBuf,
+    /// The file's name without a chosen name: "rawtap_ssh_20261117_191025".
+    base: String,
 }
 
 impl Logger {
     pub fn create(dir: &Path, kind: &str, details: &str) -> std::io::Result<Logger> {
         std::fs::create_dir_all(dir)?;
         let now = chrono::Local::now();
-        let path = dir.join(format!("rawtap_{kind}_{}.log", now.format("%Y%m%d_%H%M%S")));
+        let base = format!("rawtap_{kind}_{}", now.format("%Y%m%d_%H%M%S"));
+        let path = dir.join(format!("{base}.log"));
         let mut file = File::create(&path)?;
         write!(
             file,
@@ -23,7 +26,25 @@ impl Logger {
             now.format("%Y-%m-%d %H:%M:%S"),
             kind.to_uppercase()
         )?;
-        Ok(Logger { file, path })
+        Ok(Logger { file, path, base })
+    }
+
+    /// Gives the log a name, kept after its date and time (so logs still
+    /// sort by time): "rawtap_ssh_20261117_191025_core-switch.log". The
+    /// file stays open; renaming an open file works on Linux and Windows.
+    pub fn rename(&mut self, name: &str) -> std::io::Result<()> {
+        let path = self
+            .path
+            .with_file_name(format!("{}_{name}.log", self.base));
+        if path.exists() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("{} already exists", path.display()),
+            ));
+        }
+        std::fs::rename(&self.path, &path)?;
+        self.path = path;
+        Ok(())
     }
 
     pub fn entry(&mut self, e: &Entry) -> std::io::Result<()> {
@@ -47,9 +68,7 @@ pub fn format_entry(e: &Entry) -> String {
                 text_string(d)
             )
         }
-        EntryKind::TxHidden(n) => {
-            format!("[{t}] TX HEX:  <hidden: {n} bytes>\n[{t}] TX TEXT: <hidden>\n")
-        }
+        EntryKind::TxHidden => format!("[{t}] TX HEX:  <hidden>\n[{t}] TX TEXT: <hidden>\n"),
         EntryKind::Info(m) | EntryKind::Good(m) => format!("[{t}] -- {m}\n"),
         EntryKind::Error(m) => format!("[{t}] !! {m}\n"),
     }

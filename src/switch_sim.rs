@@ -224,8 +224,7 @@ fn drive_a_switch() {
     typ(&mut app, "127.0.0.1");
     key(&mut app, KeyCode::Down, none); // TCP port
     typ(&mut app, &port.to_string());
-    key(&mut app, KeyCode::Down, none); // Log to file
-    key(&mut app, KeyCode::Down, none); // Options
+    key(&mut app, KeyCode::Down, none); // Connection options
     key(&mut app, KeyCode::Enter, none); // on Options: expands instead of connecting
     key(&mut app, KeyCode::Down, none);
     key(&mut app, KeyCode::Down, none); // Char delay
@@ -243,7 +242,7 @@ fn drive_a_switch() {
         &mut app,
         100,
         40,
-        "start screen, description follows the cursor (Logging)",
+        "start screen, description follows the cursor (TCP port)",
     );
     key(&mut app, KeyCode::Enter, none);
     pump(&mut app, 200);
@@ -662,6 +661,11 @@ fn drive_a_switch() {
     dump(&mut app, 120, 44, "F1 menu, top level");
     key(&mut app, KeyCode::Down, none); // Send
     key(&mut app, KeyCode::Down, none); // Copy & paste
+    key(&mut app, KeyCode::Right, none); // ←→ only change settings
+    assert_eq!(
+        app.monitor.as_ref().unwrap().menu.as_ref().unwrap().section,
+        None
+    );
     key(&mut app, KeyCode::Enter, none);
     {
         let menu = app.monitor.as_ref().unwrap().menu.as_ref().unwrap();
@@ -806,13 +810,14 @@ fn drive_a_switch() {
         "password leaked into a log/transcript"
     );
     assert!(!state.contains("secret"), "password leaked into state");
+    // F6's send and the live-mode password: <hidden>, without a length.
     assert!(
-        all_text.contains("<hidden: 7 bytes>"),
-        "F6 send not logged as hidden"
+        all_text.matches("TX HEX:  <hidden>").count() >= 2,
+        "F6 send or live-mode password not logged as hidden"
     );
     assert!(
-        all_text.matches("<hidden:").count() >= 2,
-        "live-mode password not hidden"
+        !all_text.contains("bytes>"),
+        "a hidden send's length leaked"
     );
     assert!(cap_text.contains("description port 24") && !cap_text.contains("--More--"));
     assert!(state.contains("\"tcp:127.0.0.1:"));

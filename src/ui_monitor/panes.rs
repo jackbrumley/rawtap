@@ -87,12 +87,9 @@ pub(crate) fn entry_lines(e: &Entry, width: u16, fmt: LogFormat) -> Vec<Line<'st
             }
             out
         }
-        EntryKind::TxHidden(n) => vec![Line::from(vec![
+        EntryKind::TxHidden => vec![Line::from(vec![
             Span::styled(format!("{ts} TX "), DIM),
-            Span::styled(
-                format!("<hidden: {n} bytes>"),
-                Style::new().fg(Color::Magenta),
-            ),
+            Span::styled("<hidden>", Style::new().fg(Color::Magenta)),
         ])],
         EntryKind::Info(m) | EntryKind::Good(m) | EntryKind::Error(m) => {
             let (mark, style) = match e.kind {
@@ -283,9 +280,13 @@ pub(super) fn draw_term(f: &mut Frame, m: &mut Monitor, area: Rect) {
             .right_aligned(),
         );
     } else if m.live {
+        // The one place live keys is shown (the send box is hidden then).
         block = block.title_top(
             Line::from(Span::styled(
-                " LIVE KEYS · F4 to leave ",
+                format!(
+                    " LIVE KEYS · Enter sends {} · F4 to leave ",
+                    m.profile.line_ending.label()
+                ),
                 Style::new().fg(Color::Black).bg(Color::Magenta),
             ))
             .right_aligned(),

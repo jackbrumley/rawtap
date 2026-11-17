@@ -325,6 +325,10 @@ impl Monitor {
                     self.change_setting(Setting::Layout, 1);
                     return;
                 }
+                if self.rec_badge.is_some_and(|r| r.contains((x, y).into())) {
+                    self.open_logs_folder();
+                    return;
+                }
                 let Some(p) = self.pane_at(x, y) else {
                     self.selection = None;
                     return;

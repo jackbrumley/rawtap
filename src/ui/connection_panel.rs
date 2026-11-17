@@ -12,7 +12,7 @@ use ratatui::{
 };
 
 /// Width of the field labels.
-const LABEL_WIDTH: usize = 14;
+const LABEL_WIDTH: usize = 20;
 
 /// The panel's rows: how many the fields take, and how many the detected
 /// ports would take with every port listed.

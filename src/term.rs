@@ -377,6 +377,14 @@ impl Transcript {
         })
     }
 
+    /// Follows its log's new name (`Logger::rename`).
+    pub fn rename_with(&mut self, log_path: &Path) -> std::io::Result<()> {
+        let path = log_path.with_extension("txt");
+        std::fs::rename(&self.path, &path)?;
+        self.path = path;
+        Ok(())
+    }
+
     pub fn feed(&mut self, data: &[u8]) -> std::io::Result<()> {
         let mut out = String::new();
         self.cleaner.feed(data, &mut out);

@@ -21,6 +21,10 @@ pub enum Cmd {
     Paste,
     CopyAll,
     OpenTranscript,
+    OpenSessionLog,
+    OpenSessionLogsFolder,
+    CopySessionLogPath,
+    NameSessionLog,
     CopySessionLog,
     OpenLogFolder,
     CopySystemInfo,
@@ -61,7 +65,8 @@ pub mod section {
     pub const SEND: &str = "Send";
     pub const COPY: &str = "Copy & paste";
     pub const VIEW: &str = "View";
-    pub const CONNECTION: &str = "This connection";
+    pub const CONNECTION: &str = "Connection options";
+    pub const LOGS: &str = "Session log";
     pub const MACROS: &str = "Macros";
     /// Updates and Debug come last, as in every app (App Standard).
     pub const UPDATES: &str = "Updates";
@@ -266,13 +271,6 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         "Copies everything the device has printed this session as plain text: handy for long show commands that scroll off the screen.".into(),
         Cmd::CopyAll,
     ));
-    v.push(cmd(
-        section::COPY,
-        "Open transcript",
-        "",
-        "Opens this session's plain-text transcript (everything the device printed, cleaned up) in your text editor: Notepad on Windows, the desktop's default app on Linux.".into(),
-        Cmd::OpenTranscript,
-    ));
 
     // Settings remembered for this connection
     v.push(setting(
@@ -348,12 +346,53 @@ pub fn items(m: &Monitor) -> Vec<Item> {
 
     // Session
     v.push(setting(
-        section::CONNECTION,
+        section::LOGS,
         "Log to file",
         if m.logger.is_some() { "on".into() } else { "off".into() },
         "",
-        "Writes a hex log and a plain-text transcript of this session to the logs folder. Turning it off closes the current files.",
+        &match &m.logger {
+            Some(l) => format!(
+                "Writes a hex log and a plain-text transcript to the logs folder, now {}. Remembered for this connection; turning it off closes the files.",
+                l.path.display()
+            ),
+            None => "Writes a hex log and a plain-text transcript to the logs folder. Remembered for this connection.".into(),
+        },
         Setting::Logging,
+    ));
+    v.push(cmd(
+        section::LOGS,
+        "Name this session log…",
+        "",
+        "Adds a name to this session's log and transcript files, after their date and time, e.g. rawtap_ssh_20261117_191025_core-switch.log.".into(),
+        Cmd::NameSessionLog,
+    ));
+    v.push(cmd(
+        section::LOGS,
+        "Open session log",
+        "",
+        "Opens this session's log (both directions, hex and text, with times) in your text editor. Passwords typed at a password prompt are logged as <hidden>.".into(),
+        Cmd::OpenSessionLog,
+    ));
+    v.push(cmd(
+        section::LOGS,
+        "Open transcript",
+        "",
+        "Opens this session's plain-text transcript (everything the device printed, cleaned up) in your text editor: Notepad on Windows, the desktop's default app on Linux.".into(),
+        Cmd::OpenTranscript,
+    ));
+    v.push(cmd(
+        section::LOGS,
+        "Open session logs folder",
+        "Click ● REC",
+        "Opens the folder with every session's log and transcript in your file manager.".into(),
+        Cmd::OpenSessionLogsFolder,
+    ));
+    v.push(cmd(
+        section::LOGS,
+        "Copy session log path",
+        "",
+        "Copies the full path of this session's log, for a command line or a ticket.".into(),
+        Cmd::CopySessionLogPath,
     ));
     v.push(cmd(
         section::SESSION,

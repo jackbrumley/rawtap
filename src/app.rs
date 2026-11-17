@@ -227,7 +227,7 @@ impl App {
     }
 
     fn make_logger(&self, settings: &LinkSettings) -> (Option<Logger>, Option<String>) {
-        if self.no_log || !self.saved.logging {
+        if self.no_log || !self.logs(settings) {
             return (None, None);
         }
         let dir = self
@@ -243,6 +243,18 @@ impl App {
                 )),
             ),
         }
+    }
+
+    /// Whether this connection's sessions are logged: its own choice (the
+    /// monitor's, during a session, as F1 → Log to file may have changed
+    /// it), else the setting for every connection.
+    fn logs(&self, settings: &LinkSettings) -> bool {
+        let key = profile_key(settings);
+        let own = match &self.monitor {
+            Some(m) if m.profile_key == key => m.profile.logging,
+            _ => self.saved.profiles.get(&key).and_then(|p| p.logging),
+        };
+        own.unwrap_or(self.saved.logging)
     }
 
     /// A connection from the start screen opened: show the monitor.

@@ -88,16 +88,11 @@ impl Monitor {
                     Err(e) => self.set_status(e, true),
                 }
             }
-            Cmd::OpenTranscript => match &self.transcript {
-                Some(t) => {
-                    let path = t.path.clone();
-                    match crate::opener::open(&path) {
-                        Ok(()) => self.set_status("Opened the transcript", false),
-                        Err(error) => self.report_error(error),
-                    }
-                }
-                None => self.set_status("No transcript: logging is off for this session", true),
-            },
+            Cmd::OpenTranscript => self.open_transcript(),
+            Cmd::OpenSessionLog => self.open_session_log(),
+            Cmd::OpenSessionLogsFolder => self.open_logs_folder(),
+            Cmd::CopySessionLogPath => self.copy_log_path(),
+            Cmd::NameSessionLog => self.start_naming_log(),
             Cmd::CopySessionLog => match crate::session_log::path() {
                 Some(path) => match std::fs::read_to_string(path) {
                     Ok(text) => match crate::clip::set(&text) {
@@ -205,37 +200,6 @@ impl Monitor {
         }
     }
 
-    pub(super) fn toggle_logging(&mut self) {
-        self.flush_pending();
-        if self.logger.is_some() {
-            self.push(EntryKind::Info("Logging stopped for this session".into()));
-            self.logger = None;
-            self.transcript = None;
-            self.set_status("Logging off", false);
-            return;
-        }
-        let Some(dir) = self.log_dir.clone() else {
-            self.set_status("Logging is disabled (started with --no-log)", true);
-            return;
-        };
-        match Logger::create(&dir, self.settings.kind(), &self.settings.describe()) {
-            Ok(l) => {
-                self.transcript = match Transcript::create(&l.path) {
-                    Ok(t) => Some(t),
-                    Err(error) => {
-                        self.report_error(format!("Could not create the transcript: {error}"));
-                        None
-                    }
-                };
-                let p = l.path.display().to_string();
-                self.logger = Some(l);
-                self.push(EntryKind::Info(format!("Logging to {p}")));
-                self.set_status("Logging on", false);
-            }
-            Err(e) => self.set_status(format!("Couldn't start logging: {e}"), true),
-        }
-    }
-
     pub(super) fn menu_key(&mut self, k: KeyEvent) -> Action {
         let Some(mut menu) = self.menu.take() else {
             return Action::None;
@@ -267,7 +231,9 @@ impl Monitor {
             KeyCode::PageDown => menu.selected = (sel + 8).min(n.saturating_sub(1)),
             KeyCode::Home => menu.selected = 0,
             KeyCode::End => menu.selected = n.saturating_sub(1),
-            KeyCode::Enter | KeyCode::Right if matches!(row, Some(menu::Row::Section { .. })) => {
+            // Enter opens a section and Esc goes back; ←→ only ever change
+            // settings, so they mean the same on every row.
+            KeyCode::Enter if matches!(row, Some(menu::Row::Section { .. })) => {
                 if let Some(menu::Row::Section { name, .. }) = row {
                     menu.section = Some(name);
                     menu.selected = 0;
@@ -325,6 +291,12 @@ impl Monitor {
         }
         if self.menu.is_some() {
             return self.menu_key(k);
+        }
+
+        // Naming the session log captures every key until Enter / Esc.
+        if self.log_name.is_some() {
+            self.log_name_key(k);
+            return Action::None;
         }
 
         // Hidden send captures every key until Enter / Esc.

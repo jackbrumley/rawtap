@@ -1,7 +1,7 @@
 //! Drawing the start screen's list (New connection and the favourites), and
 //! the dialogs that name a session's connection or remove a favourite.
 
-use super::{DIM, dim, truncate, wrap_words};
+use super::{DIM, POPUP_DIM, dim, truncate, wrap_words};
 use crate::app::favourites::{self, FavouriteDialog, FavouriteForm};
 use crate::config::Saved;
 use ratatui::{
@@ -111,7 +111,7 @@ pub(super) fn draw_dialog(f: &mut Frame, dialog: &FavouriteDialog, saved: &Saved
                 .bg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         )))
-        .title_bottom(Line::from(Span::styled(hint, DIM)))
+        .title_bottom(Line::from(Span::styled(hint, Style::new().fg(Color::Cyan))))
         .border_style(Style::new().fg(Color::Cyan));
     f.render_widget(Paragraph::new(lines).block(block), area);
     if let Some((cx, cy)) = cursor {
@@ -145,7 +145,7 @@ fn edit_lines(form: &FavouriteForm, text_width: usize) -> (Vec<Line<'static>>, O
     ]));
     lines.push(Line::from(""));
     for r in wrap_words(&favourites::describe(&form.connection), text_width) {
-        lines.push(Line::from(Span::styled(format!("  {r}"), DIM)));
+        lines.push(Line::from(Span::styled(format!("  {r}"), POPUP_DIM)));
     }
     if let Some(error) = &form.error {
         lines.push(Line::from(""));

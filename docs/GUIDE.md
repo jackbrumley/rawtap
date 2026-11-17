@@ -13,7 +13,7 @@ Save any connection (serial port, TCP client or server, Telnet, SSH) with a name
 - **+ New connection** opens an empty connection panel (only the connection type is the one you used last). **Enter** connects without saving; **Ctrl+S** saves it as a favourite (with no name yet, it suggests one, such as `SSH admin@10.0.0.5:22`; press Ctrl+S again to keep it). **Esc** goes back to the list (twice if there are unsaved changes).
 - **F1 → Save as favourite…** in a session saves the connection you're in.
 - On the start screen, **↑↓** moves through the list without changing anything. On a favourite, **Enter** connects, **E** (or F2) opens it in the panel to change its name, connection or options, and **Del** removes it (after asking).
-- A favourite opens in its connection's view (Options ▸ View, below), so a switch can always open in the terminal.
+- A favourite opens in its connection's view (Connection options ▸ View, below), so a switch can always open in the terminal.
 - From the command line: `rawtap open "Core switch"` (any case).
 
 Favourites are kept in `state.json`. Passwords are never saved there.
@@ -28,17 +28,18 @@ RawTap never writes a password to its own files. Two ways to stop typing one:
 ## Screen
 
 ```
-┌ Hex · compact ───────────────┐┌ Terminal 94×26 ──────────────── LIVE KEYS · F4 to leave ┐
+┌ Hex · compact ───────────────┐┌ Terminal 94×29 ─────────── LIVE KEYS · Enter sends CR · F4 to leave ┐
 │12:48:35 TX  1 20       │     ││Switch#show running-config                               │
 │12:48:35 RX 63 08 08 …  │ <BS…││Building configuration...                                │
 │12:48:35 RX 33 69 6E …  │ int…││interface GigabitEthernet1/0/1                           │
 └──────────────────────────────┘└─────────────────────────────────────────────────────────┘
-┌  LIVE KEYS  Enter sends CR ─────────────────────────────────────────────────────────────┐
+ F1  Menu    F3  View  Split     F4  Leave live keys    F8  Hex compact   F1 then Ctrl+Q quits
 ```
 
-- **The view**: **Terminal** (the live terminal), **Hex** (the raw data in hex and text) or **Split** (both: side by side when the window is at least 130 columns wide, stacked otherwise). Switch with **F3** or click it in the footer (`View Terminal Split Hex`). RawTap remembers the last view you used and opens every connection in it, unless the start screen's Options ▸ View gives that connection its own (Terminal, Split or Hex).
+- **The view**: **Terminal** (the live terminal), **Hex** (the raw data in hex and text) or **Split** (both: side by side when the window is at least 130 columns wide, stacked otherwise). Switch with **F3** or click the current view in the footer (`F3 View Split`). RawTap remembers the last view you used and opens every connection in it, unless the connection panel's Connection options ▸ View gives that connection its own (Terminal, Split or Hex).
+- **Live keys** shows on the terminal pane's title, with the line ending Enter sends; the send box is hidden then, so the terminal gets its rows. The header shows a red **● REC** while the session is recorded to a log; click it to open the session logs folder.
   - **Ctrl+←/→** changes the terminal width; **Ctrl+↑/↓** changes the Hex strip height.
-- **Each connection remembers its own settings** (`serial:COM22`, `tcp:10.0.0.5:2101`...): hex format, line ending, HEX/ASCII, char delay and pane sizes. A switch and a scanner feed can each keep their own setup.
+- **Each connection remembers its own settings** (`serial:COM22`, `tcp:10.0.0.5:2101`...): hex format, line ending, HEX/ASCII, char delay, logging and pane sizes. A switch and a scanner feed can each keep their own setup.
 - **The Hex pane groups bytes into one entry per line**, starting a new entry on a newline, a 30 ms gap, a change of direction, or every 1 KB. **F8** cycles the format: compact (one row each) → hex+text → hex → text.
 
 ## Sending
@@ -49,25 +50,27 @@ RawTap never writes a password to its own files. Two ways to stop typing one:
 | HEX | `02 41 03`, `024103`, `0x02,0x41,0x03`, `02:41:03`. Sent exactly as typed. |
 | ASCII | Text, then the line ending. Also takes `\r \n \t \0 \e \\ \xHH` and the display tokens `<STX> <CR> <0x1B>`, so a received TEXT line can be pasted back. `\<` sends a literal `<`. |
 | Live keys (**F4**) | Every key goes straight to the device: Tab, `?`, space at `--More--`, Ctrl+C/Z, arrows. F-keys still work. Press F4 again to get back to line mode, where Ctrl+Q/R/N work. |
-| Hidden send (**F6**) | Typed masked, then sent with the line ending. Logged only as `<hidden: N bytes>` and never kept in history. Works from line mode or live keys. |
+| Hidden send (**F6**) | Typed masked, then sent with the line ending. Logged only as `<hidden>` (not even its length) and never kept in history. Works from line mode or live keys. |
 
-In live keys, anything typed while the cursor is just after a `Password:` / `Passcode:` / `Secret:` / `PIN:` prompt is also logged as `<hidden>`.
+At a `Password:` / `Passcode:` / `Secret:` / `PIN:` prompt, what you type is never recorded: in live keys each key is logged as `<hidden>`, and in line mode the send box shows `PASSWORD · not recorded`, masks what you type, logs the send as `<hidden>` and keeps it out of history. A prompt worded differently isn't recognised, so use **F6** hidden send there.
 
 ## Menu (F1)
 
-**F1** opens a menu in the middle of the screen. It lists its sections (Session, Send, Copy & paste, View, This connection, Macros, Updates, Debug), each with a hint of what's inside, then *Keyboard shortcuts* and *Quit*.
+**F1** opens a menu in the middle of the screen. It lists its sections (Session, Send, Copy & paste, View, Connection options, Session log, Macros, Updates, Debug), each with a hint of what's inside, then *Keyboard shortcuts* and *Quit*.
 - **↑↓** to move.
-- **Enter** (or **→**) opens a section; **Esc** goes back to the sections.
+- **Enter** opens a section; **Esc** goes back to the sections.
 - **←→** changes a setting straight away. That includes the on/off switches: live keys, raw log following/paused and the PgUp/PgDn scroll pane. The menu stays open.
 - **Enter** runs an action.
-- **Typing** searches every section at once (`delay`, `break`, `save`...); each result shows its section, such as *This connection › Char delay*.
+- **Typing** searches every section at once (`delay`, `break`, `save`...); each result shows its section, such as *Connection options › Char delay*.
 - **Esc** clears the search, then goes back, then closes the menu.
 
-The **Debug** section at the bottom has what a bug report needs: *Copy log* (RawTap's own session log), *Open log folder*, *Copy system info* and the *Log level*.
+The **Session log** section is this session's recording: *Log to file*, *Name this session log…* (adds a name after the date and time in the file names), *Open session log*, *Open transcript*, *Open session logs folder* and *Copy session log path*.
+
+The **Debug** section at the bottom has what a bug report needs: *Copy log* (RawTap's own debug log, not your sessions), *Open log folder*, *Copy system info* and the *Log level*.
 
 A short description of the highlighted item is shown at the bottom. On screen, the footer shows only F1 Menu, F3 View, F4 Live keys, F8 Hex format (when the Hex pane shows), Ctrl+N New connection and Ctrl+Q Quit.
 
-The connection panel has an **Options ▸** row (←→ or Enter to open it). It shows the line ending, char delay, send mode and view remembered for the selected port or host, so you can set them before connecting. The view is **Last used** (whichever you used last) or always **Terminal**, **Split** or **Hex** for that connection. The line under the panel lists what Enter and the other keys do for the highlighted row.
+The connection panel has a **Connection options ▸** row (←→ or Enter to open it). It shows the line ending, char delay, send mode, view and *Log to file* remembered for the selected port or host, so you can set them before connecting. *Log to file* is also in **F1 → Session log**, and changing it there is remembered too. The view is **Last used** (whichever you used last) or always **Terminal**, **Split** or **Hex** for that connection. The line under the panel lists what Enter and the other keys do for the highlighted row.
 
 ## Mouse, copy and paste
 
@@ -81,7 +84,7 @@ These follow Windows Terminal conventions:
 | Select all | **Alt+A** selects and copies the whole pane you're in: the terminal with its scrollback, or every raw log entry. In line mode **Ctrl+A** (or Ctrl+Shift+A) does too; in live keys Ctrl+A goes to the device (most terminals send Ctrl+Shift+A as Ctrl+A). Also **F1 → Select all**. |
 | Copy | **Automatic:** a selection is copied as soon as you let go of the mouse (or select all), and stays highlighted. **Ctrl+C** or **right-click** on a selection copies it again and clears the highlight. Ctrl+C copies only while there's a selection; otherwise it does what it always does. GNOME Terminal keeps **Ctrl+Shift+C** for its own copy, which can't see RawTap's selection, so use Ctrl+C. |
 | Paste | **Right-click** with nothing selected (your terminal's own paste works too). One line goes into the send box (in live keys, straight to the device). **Several lines ask for confirmation**, then go line by line with the line ending and the char delay. |
-| Long output | F1 → *Copy all terminal output*, or *Open transcript* (Notepad on Windows, your default text app on Linux) |
+| Long output | F1 → *Copy all terminal output*, or F1 → Session log → *Open transcript* (Notepad on Windows, your default text app on Linux) |
 | The console's own selection | **Shift+drag** |
 
 **Ctrl+Q** quits, from the start screen, a session or the menu. In live keys every key goes to the device, but the F1 menu still works: **F1, then Ctrl+Q** quits (and **F1, then Ctrl+N** starts a new connection). Searching the menu for "exit" finds Quit too. Ctrl+C never quits; with a selection it copies. (In Windows Terminal, Shift+click is taken by the console's own selection, which is why extending uses Ctrl+click.)
@@ -122,8 +125,8 @@ All paths are inside `~/.config/rawtap`. The `logs` and `captures` folders can b
 
 | File | What |
 |------|------|
-| `logs/rawtap_<type>_<time>.log` | Everything sent and received: timestamp, RX/TX, hex and text. Hidden sends show only their length. |
-| `logs/rawtap_<type>_<time>.txt` | Plain-text transcript of what the device printed, with escape codes and `--More--` cleaned out |
+| `logs/rawtap_<type>_<time>[_<name>].log` | Everything sent and received: timestamp, RX/TX, hex and text. Passwords and hidden sends show only `<hidden>`. The name is there once you name the session log. |
+| `logs/rawtap_<type>_<time>[_<name>].txt` | Plain-text transcript of what the device printed, with escape codes and `--More--` cleaned out |
 | `captures/*.txt` | Macro captures |
 | `logs/extracted_images/*.bmp` | Image extraction (see below) |
 | `settings.json` | Your macros, folders and image extraction settings (edit by hand, then restart RawTap) |

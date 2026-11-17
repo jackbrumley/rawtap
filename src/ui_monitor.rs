@@ -13,7 +13,7 @@ use crate::config::{Layout as PaneLayout, LogFormat};
 use crate::link::LinkSettings;
 use crate::menu::{self, Kind};
 use crate::monitor::{Entry, EntryKind, Monitor, Pane};
-use crate::ui::{DIM, centered, dim, truncate};
+use crate::ui::{DIM, POPUP_DIM, centered, dim, truncate};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
@@ -26,10 +26,18 @@ use ratatui::{
 const SIDE_BY_SIDE_MIN: u16 = 130;
 
 pub fn draw(f: &mut Frame, m: &mut Monitor) {
+    // In live keys every key goes to the device, so the send box has
+    // nothing to show and the terminal gets its rows (a hidden send still
+    // needs it).
+    let input_rows = if m.live && m.secret.is_none() && m.log_name.is_none() {
+        0
+    } else {
+        3
+    };
     let [header, body, input, footer] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(4),
-        Constraint::Length(3),
+        Constraint::Length(input_rows),
         Constraint::Length(1),
     ])
     .areas(f.area());
@@ -44,7 +52,9 @@ pub fn draw(f: &mut Frame, m: &mut Monitor) {
     if let Some(a) = log_area {
         draw_log(f, m, a);
     }
-    draw_input(f, m, input);
+    if input_rows > 0 {
+        draw_input(f, m, input);
+    }
     draw_footer(f, m, footer);
     if m.menu.is_some() || m.show_help || m.paste_confirm.is_some() {
         dim(f);
@@ -133,7 +143,7 @@ fn draw_paste_confirm(f: &mut Frame, m: &Monitor) {
                 0 => format!(" Sent line by line with {le}. Garbled? Set a char delay (F1)."),
                 ms => format!(" Each line is sent with {le}, {ms} ms between characters."),
             },
-            DIM,
+            POPUP_DIM,
         )),
         Line::from(""),
     ];
@@ -148,7 +158,7 @@ fn draw_paste_confirm(f: &mut Frame, m: &Monitor) {
     if lines.len() > shown {
         text.push(Line::from(Span::styled(
             format!("  │ … and {} more", lines.len() - shown),
-            DIM,
+            POPUP_DIM,
         )));
     }
     let block = Block::bordered()
@@ -227,7 +237,7 @@ fn thousands(n: u64) -> String {
     out
 }
 
-fn draw_header(f: &mut Frame, m: &Monitor, area: Rect) {
+fn draw_header(f: &mut Frame, m: &mut Monitor, area: Rect) {
     let (state, state_style) = match (&m.settings, m.connected, &m.peer) {
         (_, false, _) => (
             "○ DISCONNECTED".to_string(),
@@ -262,22 +272,25 @@ fn draw_header(f: &mut Frame, m: &Monitor, area: Rect) {
             thousands(m.tx_bytes)
         )),
     ];
-    if m.live {
+    // Recording: hard to miss, so nobody types a secret unaware. A click
+    // opens the session logs folder (`Monitor::on_mouse`).
+    m.rec_badge = None;
+    if m.logger.is_some() {
         spans.push(Span::raw("  "));
+        let x = area.x + spans.iter().map(|s| s.width() as u16).sum::<u16>();
+        let badge = " ● REC ";
+        m.rec_badge = Some(Rect {
+            x,
+            y: area.y,
+            width: badge.chars().count() as u16,
+            height: 1,
+        });
         spans.push(Span::styled(
-            " LIVE KEYS ",
+            badge,
             Style::new()
-                .fg(Color::Black)
-                .bg(Color::Magenta)
+                .fg(Color::White)
+                .bg(Color::Red)
                 .add_modifier(Modifier::BOLD),
-        ));
-    }
-    if let Some(l) = &m.logger
-        && let Some(name) = l.path.file_name()
-    {
-        spans.push(Span::styled(
-            format!("  log {}", name.to_string_lossy()),
-            DIM,
         ));
     }
     f.render_widget(Paragraph::new(Line::from(spans)), area);

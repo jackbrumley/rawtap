@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::menu::{Item, Row};
+use crate::ui::POPUP_DIM;
 
 /// Width of a section's name on the top level.
 const SECTION_W: usize = 18;
@@ -44,7 +45,10 @@ pub(super) fn draw_menu(f: &mut Frame, m: &Monitor) {
             Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         ));
     }
-    title.push(Span::styled(format!(" {} ", m.profile_key), DIM));
+    title.push(Span::styled(
+        format!(" {} ", m.profile_key),
+        Style::new().fg(Color::White),
+    ));
     let keys = if searching {
         " ↑↓ move  ←→ change  Enter select  Esc clear search "
     } else if menu.section.is_some() {
@@ -54,7 +58,7 @@ pub(super) fn draw_menu(f: &mut Frame, m: &Monitor) {
     };
     let block = Block::bordered()
         .title(Line::from(title))
-        .title_bottom(Line::from(Span::styled(keys, DIM)))
+        .title_bottom(Line::from(Span::styled(keys, Style::new().fg(Color::Cyan))))
         .border_style(Style::new().fg(Color::Cyan));
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -71,7 +75,8 @@ pub(super) fn draw_menu(f: &mut Frame, m: &Monitor) {
     let search_line = if menu.filter.is_empty() {
         Line::from(vec![
             Span::styled(" › ", Style::new().fg(Color::Cyan)),
-            Span::styled("type to search everything…", DIM),
+            // A placeholder, like an empty search box.
+            Span::styled("Search", DIM),
         ])
     } else {
         Line::from(vec![
@@ -105,7 +110,7 @@ pub(super) fn draw_menu(f: &mut Frame, m: &Monitor) {
     if rows.is_empty() {
         lines.push(Line::from(Span::styled(
             "  Nothing matches. Backspace or Esc to clear the search.",
-            DIM,
+            POPUP_DIM,
         )));
     }
     // Scrolled so the selection is visible.
@@ -114,7 +119,7 @@ pub(super) fn draw_menu(f: &mut Frame, m: &Monitor) {
     f.render_widget(Paragraph::new(lines), list);
 
     f.render_widget(
-        Paragraph::new(Span::styled("─".repeat(sep.width as usize), DIM)),
+        Paragraph::new(Span::styled("─".repeat(sep.width as usize), POPUP_DIM)),
         sep,
     );
     let description = match rows.get(sel) {
@@ -152,14 +157,14 @@ fn section_line(name: &str, hint: &str, selected: bool, width: usize) -> Line<'s
             Style::new().fg(Color::White).add_modifier(Modifier::BOLD),
         ),
         Span::styled("▸  ", Style::new().fg(Color::Cyan)),
-        Span::styled(hint, DIM),
+        Span::styled(hint, POPUP_DIM),
     ])
 }
 
 /// An item: its name (with its section when searching), its value and
 /// its key.
 fn item_line(item: &Item, searching: bool, selected: bool, width: usize) -> Line<'static> {
-    let key_w = 9usize;
+    let key_w = 20usize;
     let val_w = 16usize;
     let label_w = width.saturating_sub(key_w + val_w + 3);
     let value = match (&item.value, selected, item.kind) {
@@ -187,6 +192,6 @@ fn item_line(item: &Item, searching: bool, selected: bool, width: usize) -> Line
     Line::from(vec![
         Span::styled(format!(" {label:<label_w$} "), style),
         Span::styled(format!("{value:<val_w$} "), Style::new().fg(Color::Yellow)),
-        Span::styled(format!("{:>key_w$} ", item.key), DIM),
+        Span::styled(format!("{:>key_w$} ", item.key), POPUP_DIM),
     ])
 }

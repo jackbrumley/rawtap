@@ -139,7 +139,15 @@ impl App {
             Field::Parity => c.parity = cycle_in(PARITIES, &c.parity, dir),
             Field::StopBits => c.stop_bits = cycle_in(STOP_BITS, &c.stop_bits, dir),
             Field::Flow => c.flow = cycle_in(FLOWS, &c.flow, dir),
-            Field::Logging => self.saved.logging = !self.saved.logging,
+            Field::Logging => {
+                let every = self.saved.logging;
+                let p = self
+                    .saved
+                    .profiles
+                    .entry(connection_profile_key(c))
+                    .or_default();
+                p.logging = Some(!p.logging.unwrap_or(every));
+            }
             Field::Options => panel.options_open = !panel.options_open,
             // The view is one setting for every connection, not per profile.
             Field::OptLineEnding | Field::OptCharDelay | Field::OptSendMode | Field::OptLayout => {
@@ -185,6 +193,14 @@ impl App {
             .unwrap_or(self.saved.view)
     }
 
+    /// Whether a connection's sessions are logged: its own choice, else the
+    /// setting for every connection.
+    pub(crate) fn logs_connection(&self, connection: &Connection) -> bool {
+        self.profile_for(connection)
+            .logging
+            .unwrap_or(self.saved.logging)
+    }
+
     /// The remembered profile for a connection (defaults if none yet).
     pub fn profile_for(&self, connection: &Connection) -> crate::config::Profile {
         self.saved
@@ -216,7 +232,7 @@ impl App {
             Field::SshUser => c.ssh_user.clone(),
             Field::SshPort => c.ssh_port.clone(),
             Field::Logging => {
-                if self.saved.logging {
+                if self.logs_connection(c) {
                     "Yes".into()
                 } else {
                     "No".into()
@@ -230,8 +246,13 @@ impl App {
                     format!("{} ms delay", p.char_delay_ms)
                 };
                 let arrow = if panel.options_open { "▾" } else { "▸" };
+                let log = if self.logs_connection(c) {
+                    "logged"
+                } else {
+                    "not logged"
+                };
                 format!(
-                    "{arrow} {} · {delay} · {} · {}",
+                    "{arrow} {} · {delay} · {} · {} · {log}",
                     p.line_ending.label(),
                     p.input_mode.label(),
                     crate::config::view_choice_label(p.view)

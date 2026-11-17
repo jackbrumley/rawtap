@@ -264,6 +264,10 @@ pub struct Profile {
     /// The view this connection opens in: `None` is "Last used"
     /// (`Saved::view`, shared by every connection).
     pub view: Option<Layout>,
+    /// Whether this connection's sessions are logged to file: `None`
+    /// follows `Saved::logging`, the setting for every connection from
+    /// before logging was per connection.
+    pub logging: Option<bool>,
 }
 
 impl Default for Profile {
@@ -277,6 +281,7 @@ impl Default for Profile {
             log_rows: 0,
             char_delay_ms: 0,
             view: None,
+            logging: None,
         }
     }
 }
@@ -364,6 +369,7 @@ pub struct Saved {
     /// The start screen's connection (flattened: state.json keeps its shape).
     #[serde(flatten)]
     pub connection: Connection,
+    /// Logging for connections without their own choice (`Profile::logging`).
     pub logging: bool,
     /// The view last used, for every connection without a fixed one.
     pub view: Layout,
