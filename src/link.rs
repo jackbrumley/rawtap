@@ -754,21 +754,27 @@ mod tests {
 
     #[test]
     fn tcp_client_and_server_talk() {
-        // Pick a free port.
-        let port = TcpListener::bind("127.0.0.1:0")
-            .unwrap()
-            .local_addr()
-            .unwrap()
-            .port();
-        let (stx, srx) = mpsc::channel();
-        let server = Link::open(
-            &LinkSettings::TcpListen {
-                bind: "127.0.0.1".into(),
-                port,
-            },
-            stx,
-        )
-        .unwrap();
+        // Pick a free port. Another test's connection can take it before the
+        // server binds it ("already in use"), so then pick another.
+        let (port, server, srx) = (0..10)
+            .find_map(|_| {
+                let port = TcpListener::bind("127.0.0.1:0")
+                    .unwrap()
+                    .local_addr()
+                    .unwrap()
+                    .port();
+                let (stx, srx) = mpsc::channel();
+                let settings = LinkSettings::TcpListen {
+                    bind: "127.0.0.1".into(),
+                    port,
+                };
+                match Link::open(&settings, stx) {
+                    Ok(server) => Some((port, server, srx)),
+                    Err(e) if e.contains("already") => None,
+                    Err(e) => panic!("{e}"),
+                }
+            })
+            .expect("no free port in 10 tries");
         let (ctx, crx) = mpsc::channel();
         let client = Link::open(
             &LinkSettings::TcpClient {
