@@ -1,8 +1,10 @@
-//! The start screen: its fields, the detected serial ports, and turning
-//! what's filled in into connection settings and a per-connection profile key.
+//! The start screen: the list (New connection, then the favourites), the
+//! connection panel's fields, the detected serial ports, and turning a
+//! connection into settings and a per-connection profile key.
 
 use crate::config::{ConnMode, Connection, Saved};
 use crate::link::LinkSettings;
+use ratatui::crossterm::event::KeyCode;
 use serialport::{DataBits, FlowControl, Parity, StopBits};
 use std::time::Instant;
 
@@ -17,6 +19,7 @@ pub const FLOWS: &[&str] = &["None", "Software", "Hardware"];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Field {
+    Name,
     Mode,
     SerialPort,
     Baud,
@@ -44,6 +47,7 @@ pub enum Field {
 impl Field {
     pub fn label(self) -> &'static str {
         match self {
+            Field::Name => "Name",
             Field::Mode => "Connection",
             Field::SerialPort => "Serial port",
             Field::Baud => "Baud rate",
@@ -72,6 +76,9 @@ impl Field {
     /// Shown under the form for the highlighted field.
     pub fn description(self) -> &'static str {
         match self {
+            Field::Name => {
+                "The favourite's name in the list. Ctrl+S saves the connection as a favourite under this name; Enter connects without saving."
+            }
             Field::Mode => {
                 "Serial: a serial port (USB adapter or console cable). TCP client: raw TCP out to an IP and port. TCP server: wait for a device to connect to this computer. Telnet: a switch or router's Telnet login. SSH: an SSH login, through your system's ssh."
             }
@@ -124,11 +131,19 @@ impl Field {
             }
         }
     }
+    /// Fields ←/→ cycle through choices: every field that isn't text, and
+    /// the serial port and baud rate, which are both. (Options opens with
+    /// ←/→ too, but has no choices to show arrows for.)
+    pub fn cycles(self) -> bool {
+        !self.is_text() || matches!(self, Field::SerialPort | Field::Baud)
+    }
+
     /// Text fields accept typing; the rest are cycled with ←/→.
     pub fn is_text(self) -> bool {
         matches!(
             self,
-            Field::SerialPort
+            Field::Name
+                | Field::SerialPort
                 | Field::Baud
                 | Field::Host
                 | Field::TcpPort
@@ -143,11 +158,12 @@ impl Field {
     }
 }
 
-/// A row on the start screen: the favourites, then the form's fields.
+/// A row in the start screen's list.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Row {
+pub enum ListRow {
+    /// Opens an empty connection panel.
+    New,
     Favourite(usize),
-    Field(Field),
 }
 
 pub struct PortInfo {
@@ -155,28 +171,145 @@ pub struct PortInfo {
     pub desc: String,
 }
 
-pub struct Setup {
+/// The connection panel: a new connection, or a favourite being edited.
+/// It works on its own copy, so nothing changes until Enter connects or
+/// Ctrl+S saves.
+pub struct Panel {
+    /// The favourite being edited; `None` for a new connection.
+    pub favourite: Option<usize>,
+    pub name: String,
+    pub connection: Connection,
     pub focus: usize,
+    /// The text cursor in the highlighted field, in characters; past the
+    /// end means at the end (where it goes when the highlight moves).
+    pub cursor: usize,
+    pub options_open: bool,
+    /// What was there when the panel opened, to tell whether Esc would
+    /// throw changes away.
+    pub(super) opened_with: (String, Connection),
+    /// Esc was pressed once with unsaved changes: a second Esc discards them.
+    pub discard_armed: bool,
+}
+
+impl Panel {
+    pub fn new(favourite: Option<usize>, name: String, connection: Connection) -> Panel {
+        Panel {
+            favourite,
+            opened_with: (name.clone(), connection.clone()),
+            name,
+            connection,
+            focus: 0,
+            cursor: usize::MAX,
+            options_open: false,
+            discard_armed: false,
+        }
+    }
+
+    pub fn fields(&self) -> Vec<Field> {
+        Setup::fields(self.connection.mode, self.options_open)
+    }
+
+    /// The highlighted field (focus clamped to the fields there are).
+    pub fn focused_field(&mut self) -> Field {
+        let fields = self.fields();
+        self.focus = self.focus.min(fields.len() - 1);
+        fields[self.focus]
+    }
+
+    /// Moves the highlight; the cursor goes to the end of the new field.
+    pub fn move_focus(&mut self, focus: usize) {
+        self.focus = focus;
+        self.cursor = usize::MAX;
+    }
+
+    /// The text of a field that takes typing.
+    pub fn text_mut(&mut self, f: Field) -> Option<&mut String> {
+        let c = &mut self.connection;
+        Some(match f {
+            Field::Name => &mut self.name,
+            Field::SerialPort => &mut c.serial_port,
+            Field::Baud => &mut c.baud,
+            Field::Host => &mut c.tcp_host,
+            Field::TcpPort => &mut c.tcp_port,
+            Field::Bind => &mut c.listen_bind,
+            Field::ListenPort => &mut c.listen_port,
+            Field::TelnetHost => &mut c.telnet_host,
+            Field::TelnetPort => &mut c.telnet_port,
+            Field::SshHost => &mut c.ssh_host,
+            Field::SshUser => &mut c.ssh_user,
+            Field::SshPort => &mut c.ssh_port,
+            _ => return None,
+        })
+    }
+
+    /// Where the cursor sits in `text`, in characters.
+    pub fn cursor_in(&self, text: &str) -> usize {
+        self.cursor.min(text.chars().count())
+    }
+
+    /// Typing in a text field: ←→ (where they don't cycle), Home, End,
+    /// Backspace, Delete and characters, at the cursor.
+    pub fn edit_text(&mut self, field: Field, key: KeyCode) {
+        let mut cursor = self.cursor;
+        let Some(text) = self.text_mut(field) else {
+            return;
+        };
+        let len = text.chars().count();
+        cursor = cursor.min(len);
+        let byte =
+            |text: &str, at: usize| text.char_indices().nth(at).map_or(text.len(), |(b, _)| b);
+        match key {
+            KeyCode::Left => cursor = cursor.saturating_sub(1),
+            KeyCode::Right => cursor = (cursor + 1).min(len),
+            KeyCode::Home => cursor = 0,
+            KeyCode::End => cursor = len,
+            KeyCode::Backspace if cursor > 0 => {
+                cursor -= 1;
+                text.remove(byte(text, cursor));
+            }
+            KeyCode::Delete if cursor < len => {
+                text.remove(byte(text, cursor));
+            }
+            KeyCode::Char(c) => {
+                text.insert(byte(text, cursor), c);
+                cursor += 1;
+            }
+            _ => {}
+        }
+        self.cursor = cursor;
+    }
+
+    /// A paste into a text field, at the cursor (its first line).
+    pub fn paste(&mut self, field: Field, pasted: &str) {
+        for c in pasted.lines().next().unwrap_or("").trim().chars() {
+            self.edit_text(field, KeyCode::Char(c));
+        }
+    }
+
+    pub fn has_changes(&self) -> bool {
+        self.opened_with.0 != self.name || self.opened_with.1 != self.connection
+    }
+}
+
+pub struct Setup {
+    /// The highlighted row in the list.
+    pub focus: usize,
+    /// The connection panel, when it's open (it replaces the list).
+    pub panel: Option<Panel>,
     pub ports: Vec<PortInfo>,
     pub error: Option<String>,
-    pub options_open: bool,
     pub(super) last_scan: Option<Instant>,
 }
 
 impl Setup {
-    pub fn rows(saved: &Saved, options_open: bool) -> Vec<Row> {
-        (0..saved.favourites.len())
-            .map(Row::Favourite)
-            .chain(
-                Setup::fields(saved.connection.mode, options_open)
-                    .into_iter()
-                    .map(Row::Field),
-            )
+    pub fn list_rows(saved: &Saved) -> Vec<ListRow> {
+        std::iter::once(ListRow::New)
+            .chain((0..saved.favourites.len()).map(ListRow::Favourite))
             .collect()
     }
 
     pub fn fields(mode: ConnMode, options_open: bool) -> Vec<Field> {
-        let mut f = vec![Field::Mode];
+        let mut f = vec![Field::Name, Field::Mode];
         match mode {
             ConnMode::Serial => f.extend([
                 Field::SerialPort,

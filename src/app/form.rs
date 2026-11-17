@@ -1,17 +1,19 @@
-//! The start screen's form: keys, typing into fields, cycling choices and
-//! what each field shows. Moving onto a favourite fills the form.
+//! The start screen's keys: the list (New connection, then the favourites)
+//! and the connection panel (typing into fields, cycling choices and what
+//! each field shows). Moving through the list never changes anything.
 
 use super::App;
 use super::setup::{
-    BAUDS, DATA_BITS, FLOWS, Field, PARITIES, Row, STOP_BITS, Setup, connection_profile_key,
-    cycle_in,
+    BAUDS, DATA_BITS, FLOWS, Field, ListRow, PARITIES, Panel, STOP_BITS, Setup,
+    connection_profile_key, cycle_in,
 };
+use crate::config::Connection;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 impl App {
     pub(super) fn setup_key(&mut self, k: KeyEvent) {
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
-        // While connecting the form waits: Esc cancels, Ctrl+Q still quits.
+        // While connecting the screen waits: Esc cancels, Ctrl+Q still quits.
         if self.connecting.is_some() {
             match k.code {
                 KeyCode::Esc => self.cancel_connect(),
@@ -20,102 +22,130 @@ impl App {
             }
             return;
         }
-        let n = Setup::rows(&self.saved, self.setup.options_open).len();
-        let Some(row) = self.focused_row() else {
-            return;
-        };
-        let field = match row {
-            Row::Field(field) => Some(field),
-            Row::Favourite(_) => None,
-        };
+        match k.code {
+            KeyCode::Char('q') if ctrl => self.quit = true,
+            KeyCode::Char('u') if ctrl => self.request_update(),
+            KeyCode::F(5) => self.rescan_ports(),
+            _ if self.setup.panel.is_some() => self.panel_key(k),
+            _ => self.list_key(k),
+        }
+    }
+
+    fn list_key(&mut self, k: KeyEvent) {
+        let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+        let n = Setup::list_rows(&self.saved).len();
+        let row = self.focused_list_row();
         match (k.code, row) {
-            (KeyCode::Char('q'), _) if ctrl => self.quit = true,
-            (KeyCode::Char('u'), _) if ctrl => self.request_update(),
-            (KeyCode::Char('s'), _) if ctrl => self.save_form_as_favourite(),
-            (KeyCode::Up, _) => self.move_focus((self.setup.focus + n - 1) % n),
-            (KeyCode::Down, _) => self.move_focus((self.setup.focus + 1) % n),
-            (KeyCode::Left, Row::Field(field)) => self.cycle(field, -1),
-            (KeyCode::Right, Row::Field(field)) => self.cycle(field, 1),
-            (KeyCode::Enter, Row::Field(Field::Options)) => self.cycle(Field::Options, 1),
-            (KeyCode::Enter, _) => self.request_connect(),
-            (KeyCode::F(2), Row::Favourite(i)) => self.edit_favourite(i),
-            (KeyCode::Delete, Row::Favourite(i)) => self.ask_remove_favourite(i),
-            (KeyCode::F(5), _) => self.rescan_ports(),
-            (KeyCode::Backspace, _) => {
-                if let Some(t) = field.and_then(|f| self.text_mut(f)) {
-                    t.pop();
-                }
-            }
-            (KeyCode::Char(c), _) if !ctrl || k.modifiers.contains(KeyModifiers::ALT) => {
-                if let Some(t) = field.and_then(|f| self.text_mut(f)) {
-                    t.push(c);
-                }
-            }
+            (KeyCode::Up, _) => self.setup.focus = (self.setup.focus + n - 1) % n,
+            (KeyCode::Down, _) => self.setup.focus = (self.setup.focus + 1) % n,
+            (KeyCode::Enter, ListRow::New) => self.open_new_connection(),
+            (KeyCode::Enter, ListRow::Favourite(i)) => self.connect_favourite(i),
+            (KeyCode::Char('e'), ListRow::Favourite(i)) if !ctrl => self.edit_favourite(i),
+            (KeyCode::F(2), ListRow::Favourite(i)) => self.edit_favourite(i),
+            (KeyCode::Delete, ListRow::Favourite(i)) => self.ask_remove_favourite(i),
             _ => {}
         }
     }
 
-    /// The start screen's highlighted row (focus clamped to the rows there are).
-    pub fn focused_row(&mut self) -> Option<Row> {
-        let rows = Setup::rows(&self.saved, self.setup.options_open);
-        self.setup.focus = self.setup.focus.min(rows.len().saturating_sub(1));
-        rows.get(self.setup.focus).copied()
-    }
-
-    /// Moving onto a favourite puts its connection on the form, so Enter
-    /// connects to it and the form below shows what it is.
-    fn move_focus(&mut self, focus: usize) {
-        self.setup.focus = focus;
-        if let Some(Row::Favourite(i)) = self.focused_row() {
-            self.saved.connection = self.saved.favourites[i].connection.clone();
-            self.setup.error = None;
+    fn panel_key(&mut self, k: KeyEvent) {
+        let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+        let Some(panel) = self.setup.panel.as_mut() else {
+            return;
+        };
+        let field = panel.focused_field();
+        let n = panel.fields().len();
+        if k.code != KeyCode::Esc {
+            panel.discard_armed = false;
+        }
+        let typed = !ctrl || k.modifiers.contains(KeyModifiers::ALT);
+        match k.code {
+            KeyCode::Esc => self.close_panel(),
+            KeyCode::Char('s') if ctrl => self.save_panel(),
+            KeyCode::Up => panel.move_focus((panel.focus + n - 1) % n),
+            KeyCode::Down => panel.move_focus((panel.focus + 1) % n),
+            KeyCode::Left if field.cycles() || field == Field::Options => self.cycle(field, -1),
+            KeyCode::Right if field.cycles() || field == Field::Options => self.cycle(field, 1),
+            KeyCode::Enter if field == Field::Options => self.cycle(Field::Options, 1),
+            KeyCode::Enter => self.connect_panel(),
+            KeyCode::Char(_) if !typed => {}
+            code => panel.edit_text(field, code),
         }
     }
 
-    pub(super) fn text_mut(&mut self, f: Field) -> Option<&mut String> {
-        let s = &mut self.saved;
-        Some(match f {
-            Field::SerialPort => &mut s.connection.serial_port,
-            Field::Baud => &mut s.connection.baud,
-            Field::Host => &mut s.connection.tcp_host,
-            Field::TcpPort => &mut s.connection.tcp_port,
-            Field::Bind => &mut s.connection.listen_bind,
-            Field::ListenPort => &mut s.connection.listen_port,
-            Field::TelnetHost => &mut s.connection.telnet_host,
-            Field::TelnetPort => &mut s.connection.telnet_port,
-            Field::SshHost => &mut s.connection.ssh_host,
-            Field::SshUser => &mut s.connection.ssh_user,
-            Field::SshPort => &mut s.connection.ssh_port,
-            _ => return None,
-        })
+    /// The list's highlighted row (focus clamped to the rows there are).
+    pub fn focused_list_row(&mut self) -> ListRow {
+        let rows = Setup::list_rows(&self.saved);
+        self.setup.focus = self.setup.focus.min(rows.len() - 1);
+        rows[self.setup.focus]
+    }
+
+    /// Enter on "New connection": an empty panel. Only the connection type
+    /// is the last one used; nothing else is copied, so a new connection is
+    /// never a favourite in disguise.
+    pub(super) fn open_new_connection(&mut self) {
+        let mut connection = Connection {
+            mode: self.saved.connection.mode,
+            ..Connection::default()
+        };
+        if connection.serial_port.trim().is_empty()
+            && let Some(p) = self.setup.ports.first()
+        {
+            connection.serial_port = p.name.clone();
+        }
+        self.setup.error = None;
+        self.setup.panel = Some(Panel::new(None, String::new(), connection));
+    }
+
+    /// Enter in the panel: connect to what's in it. Nothing is saved as a
+    /// favourite; the panel stays open if the connection fails.
+    fn connect_panel(&mut self) {
+        if let Some(panel) = &self.setup.panel {
+            self.saved.connection = panel.connection.clone();
+            self.request_connect();
+        }
+    }
+
+    /// Esc in the panel: back to the list. Unsaved changes need a second Esc.
+    fn close_panel(&mut self) {
+        let Some(panel) = self.setup.panel.as_mut() else {
+            return;
+        };
+        if panel.has_changes() && !panel.discard_armed {
+            panel.discard_armed = true;
+            self.setup.error = Some(
+                "There are unsaved changes. Esc again throws them away; Ctrl+S saves them.".into(),
+            );
+            return;
+        }
+        self.setup.panel = None;
+        self.setup.error = None;
     }
 
     fn cycle(&mut self, f: Field, dir: i32) {
-        let s = &mut self.saved;
+        let Some(panel) = self.setup.panel.as_mut() else {
+            return;
+        };
+        let c = &mut panel.connection;
         match f {
-            Field::Mode => s.connection.mode = s.connection.mode.cycle(dir),
+            Field::Mode => c.mode = c.mode.cycle(dir),
             Field::SerialPort => {
                 let names: Vec<&str> = self.setup.ports.iter().map(|p| p.name.as_str()).collect();
                 if !names.is_empty() {
-                    s.connection.serial_port = cycle_in(&names, &s.connection.serial_port, dir);
+                    c.serial_port = cycle_in(&names, &c.serial_port, dir);
                 }
             }
-            Field::Baud => s.connection.baud = cycle_in(BAUDS, &s.connection.baud, dir),
-            Field::DataBits => {
-                s.connection.data_bits = cycle_in(DATA_BITS, &s.connection.data_bits, dir)
-            }
-            Field::Parity => s.connection.parity = cycle_in(PARITIES, &s.connection.parity, dir),
-            Field::StopBits => {
-                s.connection.stop_bits = cycle_in(STOP_BITS, &s.connection.stop_bits, dir)
-            }
-            Field::Flow => s.connection.flow = cycle_in(FLOWS, &s.connection.flow, dir),
-            Field::Logging => s.logging = !s.logging,
-            Field::Options => self.setup.options_open = !self.setup.options_open,
+            Field::Baud => c.baud = cycle_in(BAUDS, &c.baud, dir),
+            Field::DataBits => c.data_bits = cycle_in(DATA_BITS, &c.data_bits, dir),
+            Field::Parity => c.parity = cycle_in(PARITIES, &c.parity, dir),
+            Field::StopBits => c.stop_bits = cycle_in(STOP_BITS, &c.stop_bits, dir),
+            Field::Flow => c.flow = cycle_in(FLOWS, &c.flow, dir),
+            Field::Logging => self.saved.logging = !self.saved.logging,
+            Field::Options => panel.options_open = !panel.options_open,
             // The view is one setting for every connection, not per profile.
             Field::OptLineEnding | Field::OptCharDelay | Field::OptSendMode | Field::OptLayout => {
                 use crate::codec::LineEnding as L;
-                let key = connection_profile_key(&s.connection);
-                let p = s.profiles.entry(key).or_default();
+                let key = connection_profile_key(c);
+                let p = self.saved.profiles.entry(key).or_default();
                 match f {
                     Field::OptLineEnding => {
                         p.line_ending =
@@ -134,7 +164,8 @@ impl App {
                     }
                 }
             }
-            Field::Host
+            Field::Name
+            | Field::Host
             | Field::TcpPort
             | Field::Bind
             | Field::ListenPort
@@ -149,56 +180,56 @@ impl App {
     /// The view a new session opens in: the connection's own, or the last
     /// one used.
     pub(crate) fn view_for_connection(&self) -> crate::config::Layout {
-        self.form_profile().view.unwrap_or(self.saved.view)
+        self.profile_for(&self.saved.connection)
+            .view
+            .unwrap_or(self.saved.view)
     }
 
-    /// The remembered profile for what's typed in the form (defaults if none yet).
-    pub fn form_profile(&self) -> crate::config::Profile {
+    /// The remembered profile for a connection (defaults if none yet).
+    pub fn profile_for(&self, connection: &Connection) -> crate::config::Profile {
         self.saved
             .profiles
-            .get(&connection_profile_key(&self.saved.connection))
+            .get(&connection_profile_key(connection))
             .cloned()
             .unwrap_or_default()
     }
 
-    pub fn field_value(&self, f: Field) -> String {
-        let s = &self.saved;
+    /// What a field of the panel shows.
+    pub fn field_value(&self, panel: &Panel, f: Field) -> String {
+        let c = &panel.connection;
         match f {
-            Field::Mode => s.connection.mode.label().to_string(),
-            Field::SerialPort => s.connection.serial_port.clone(),
-            Field::Baud => s.connection.baud.clone(),
-            Field::DataBits => s.connection.data_bits.clone(),
-            Field::Parity => s.connection.parity.clone(),
-            Field::StopBits => s.connection.stop_bits.clone(),
-            Field::Flow => s.connection.flow.clone(),
-            Field::Host => s.connection.tcp_host.clone(),
-            Field::TcpPort => s.connection.tcp_port.clone(),
-            Field::Bind => s.connection.listen_bind.clone(),
-            Field::ListenPort => s.connection.listen_port.clone(),
-            Field::TelnetHost => s.connection.telnet_host.clone(),
-            Field::TelnetPort => s.connection.telnet_port.clone(),
-            Field::SshHost => s.connection.ssh_host.clone(),
-            Field::SshUser => s.connection.ssh_user.clone(),
-            Field::SshPort => s.connection.ssh_port.clone(),
+            Field::Name => panel.name.clone(),
+            Field::Mode => c.mode.label().to_string(),
+            Field::SerialPort => c.serial_port.clone(),
+            Field::Baud => c.baud.clone(),
+            Field::DataBits => c.data_bits.clone(),
+            Field::Parity => c.parity.clone(),
+            Field::StopBits => c.stop_bits.clone(),
+            Field::Flow => c.flow.clone(),
+            Field::Host => c.tcp_host.clone(),
+            Field::TcpPort => c.tcp_port.clone(),
+            Field::Bind => c.listen_bind.clone(),
+            Field::ListenPort => c.listen_port.clone(),
+            Field::TelnetHost => c.telnet_host.clone(),
+            Field::TelnetPort => c.telnet_port.clone(),
+            Field::SshHost => c.ssh_host.clone(),
+            Field::SshUser => c.ssh_user.clone(),
+            Field::SshPort => c.ssh_port.clone(),
             Field::Logging => {
-                if s.logging {
+                if self.saved.logging {
                     "Yes".into()
                 } else {
                     "No".into()
                 }
             }
             Field::Options => {
-                let p = self.form_profile();
+                let p = self.profile_for(c);
                 let delay = if p.char_delay_ms == 0 {
                     "no delay".to_string()
                 } else {
                     format!("{} ms delay", p.char_delay_ms)
                 };
-                let arrow = if self.setup.options_open {
-                    "▾"
-                } else {
-                    "▸"
-                };
+                let arrow = if panel.options_open { "▾" } else { "▸" };
                 format!(
                     "{arrow} {} · {delay} · {} · {}",
                     p.line_ending.label(),
@@ -206,13 +237,13 @@ impl App {
                     crate::config::view_choice_label(p.view)
                 )
             }
-            Field::OptLineEnding => self.form_profile().line_ending.label().into(),
-            Field::OptCharDelay => match self.form_profile().char_delay_ms {
+            Field::OptLineEnding => self.profile_for(c).line_ending.label().into(),
+            Field::OptCharDelay => match self.profile_for(c).char_delay_ms {
                 0 => "off".into(),
                 ms => format!("{ms} ms"),
             },
-            Field::OptSendMode => self.form_profile().input_mode.label().into(),
-            Field::OptLayout => crate::config::view_choice_label(self.form_profile().view).into(),
+            Field::OptSendMode => self.profile_for(c).input_mode.label().into(),
+            Field::OptLayout => crate::config::view_choice_label(self.profile_for(c).view).into(),
         }
     }
 }

@@ -138,8 +138,8 @@ saying why.
 - `src/app/identity.rs`: `APP_ID` and its tests; the launcher is
   `packaging/info.brumley.rawtap.desktop` (`Terminal=true`).
 - `src/app.rs`, `src/ui.rs`: the start screen and app wiring. In a short
-  window the detected ports list gives way first ("… and N more"), so the
-  keys, errors and notes under it always show.
+  window the connection panel's detected ports list gives way first
+  ("… and N more"), so the keys, errors and notes under it always show.
 - `src/monitor.rs`: the monitor's state (raw log, terminal, send box,
   macros); `src/monitor/view.rs` (panes, mouse, copy and paste) and
   `src/monitor/keys.rs` (commands, the F1 menu, keys).
@@ -155,14 +155,19 @@ saying why.
 - `src/app/connect.rs`: opening a connection on a background thread (each
   attempt has its own event channel), so the start screen shows a spinner
   and Esc cancels; Ctrl+R's reconnect uses it too.
-- `src/app/setup.rs`: the start screen's rows (favourites, then fields)
-  and the settings and profile key a connection makes; `src/app/form.rs`:
-  the start screen's keys and field values; `src/app/update_prompt.rs`:
-  update checks and the Update Available dialog.
+- `src/app/setup.rs`: the start screen's list (New connection, then the
+  favourites), the connection panel (`Panel`: a new connection or a
+  favourite being edited, on its own copy until Enter connects or Ctrl+S
+  saves) and its fields, and the settings and profile key a connection
+  makes; `src/app/form.rs`: the list's and the panel's keys and field
+  values; `src/app/update_prompt.rs`: update checks and the Update
+  Available dialog.
 - `src/app/favourites.rs`: favourites (named connections in `state.json`;
-  the view and other options stay the connection's own profile): Ctrl+S,
-  F2, Del, F1 → Save as favourite, `rawtap open`; `src/ui/favourites.rs`
-  draws their rows and dialog.
+  the view and other options stay the connection's own profile): Enter
+  connects, E / F2 edits in the panel, Ctrl+S in the panel saves, Del, F1
+  → Save as favourite, `rawtap open`; `src/ui/favourites.rs` draws the
+  list's rows and the name and remove dialogs, `src/ui/connection_panel.rs`
+  the panel.
 - `src/secrets.rs`: remembered passwords, only in the OS keyring
   (keyring-core: Secret Service on Linux, Credential Manager on Windows);
   `src/monitor/password.rs` sends one at a connection's first login

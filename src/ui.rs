@@ -1,8 +1,9 @@
 //! Rendering: dispatch, and the setup screen. The monitor screen is in ui_monitor.rs.
 
+mod connection_panel;
 mod favourites;
 
-use crate::app::setup::{Field, Row, Setup};
+use crate::app::setup::{ListRow, Setup};
 use crate::app::update_prompt::UpdatePrompt;
 use crate::app::{App, Screen};
 use ratatui::{
@@ -172,24 +173,27 @@ struct SetupLayout {
     area: Rect,
     error_rows: Vec<String>,
     note_rows: Vec<String>,
-    /// Detected ports listed; the rest are summed up in one "… and N more"
-    /// row. The list is the only part that gives way in a short window, so
-    /// the keys, errors and notes under it always show.
+    /// Detected ports listed in the connection panel; the rest are summed up
+    /// in one "… and N more" row. The list is the only part that gives way
+    /// in a short window, so the keys, errors and notes under it always show.
     ports_shown: usize,
 }
 
+/// The list's rows: "New connection", a gap, the "Favourites" heading, then
+/// the favourites (or a line saying how to save one).
+fn list_rows(app: &App) -> usize {
+    3 + app.saved.favourites.len().max(1)
+}
+
 fn setup_layout(app: &App, full: Rect) -> SetupLayout {
-    let rows = Setup::rows(&app.saved, app.setup.options_open);
-    // The favourites' heading and the gap under them.
-    let favourite_rows = if app.saved.favourites.is_empty() {
-        0
-    } else {
-        2
-    };
-    let ports_rows = if app.saved.connection.mode == crate::config::ConnMode::Serial {
-        app.setup.ports.len().max(1) + 2
-    } else {
-        0
+    // The panel has a description of the highlighted field (blank, rule,
+    // two rows); the list's keys say enough on their own.
+    let (body_rows, ports_rows, description_rows) = match &app.setup.panel {
+        Some(panel) => {
+            let (fields, ports) = connection_panel::rows(panel, app.setup.ports.len());
+            (fields, ports, 4)
+        }
+        None => (list_rows(app), 0, 0),
     };
     // Centred horizontally but pinned near the top, so the box doesn't jump when the
     // number of fields changes between Serial / TCP / Listen.
@@ -216,9 +220,9 @@ fn setup_layout(app: &App, full: Rect) -> SetupLayout {
             1 + error_rows.iter().map(rows_for).sum::<usize>()
         };
     // Exactly what `draw_setup` draws: the borders, the blank top row, the
-    // rows and port list, the description (blank, rule, two rows), the keys
-    // (blank, one row), then errors and notes.
-    let h = (2 + 1 + favourite_rows + rows.len() + ports_rows + 4 + 2 + notes_rows) as u16;
+    // rows and port list, the panel's description, the keys (blank, one
+    // row), then errors and notes.
+    let h = (2 + 1 + body_rows + ports_rows + description_rows + 2 + notes_rows) as u16;
     let top = if full.height >= h + 2 { 1 } else { 0 };
     // Too tall: list fewer ports, and one row saying how many more there are.
     let excess = h.saturating_sub(full.height - top) as usize;
@@ -248,8 +252,6 @@ fn setup_layout(app: &App, full: Rect) -> SetupLayout {
 }
 
 fn draw_setup(f: &mut Frame, app: &App) {
-    let rows = Setup::rows(&app.saved, app.setup.options_open);
-    let focused_row = rows.get(app.setup.focus).copied();
     let SetupLayout {
         area,
         error_rows,
@@ -257,6 +259,13 @@ fn draw_setup(f: &mut Frame, app: &App) {
         ports_shown,
     } = setup_layout(app, f.area());
     f.render_widget(Clear, area);
+    let heading = match &app.setup.panel {
+        None => " raw serial / TCP monitor ".to_string(),
+        Some(panel) => match panel.favourite {
+            None => " New connection ".to_string(),
+            Some(_) => " Edit favourite ".to_string(),
+        },
+    };
     let block = Block::bordered()
         .title(Line::from(vec![
             Span::styled(
@@ -266,12 +275,12 @@ fn draw_setup(f: &mut Frame, app: &App) {
                     .bg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(" raw serial / TCP monitor "),
+            Span::raw(heading),
         ]))
         .title_bottom(Line::from(Span::styled(
-            match focused_row {
-                Some(Row::Favourite(_)) => " ↑↓ move  Ctrl+Q quit ",
-                _ => " ↑↓ move  ←→ change  F5 rescan  Ctrl+Q quit ",
+            match app.setup.panel {
+                None => " ↑↓ move  Ctrl+Q quit ",
+                Some(_) => " ↑↓ move  ←→ change  F5 rescan  Esc back  Ctrl+Q quit ",
             },
             DIM,
         )))
@@ -281,102 +290,28 @@ fn draw_setup(f: &mut Frame, app: &App) {
 
     let mut lines: Vec<Line> = vec![Line::from("")];
     let mut cursor = None;
-    if !app.saved.favourites.is_empty() {
-        lines.push(Line::from(Span::styled("   Favourites", DIM)));
-    }
-    for (i, row) in rows.iter().enumerate() {
-        let focused = i == app.setup.focus;
-        let fld = match row {
-            Row::Favourite(n) => {
-                lines.push(favourites::row(&app.saved, *n, focused, inner.width));
-                if n + 1 == app.saved.favourites.len() {
-                    lines.push(Line::from(""));
-                }
-                continue;
-            }
-            Row::Field(fld) => fld,
-        };
-        let value = app.field_value(*fld);
-        let label_style = if focused {
-            Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-        } else {
-            Style::new()
-        };
-        let marker = if focused { " ▶ " } else { "   " };
-        let mut spans = vec![
-            Span::styled(marker, Style::new().fg(Color::Cyan)),
-            Span::styled(format!("{:<14}", fld.label()), label_style),
-        ];
-        let val_style = if focused {
-            Style::new().fg(Color::Black).bg(Color::Cyan)
-        } else {
-            Style::new().fg(Color::White)
-        };
-        let cyclable = !fld.is_text() || matches!(fld, Field::SerialPort | Field::Baud);
-        let cyclable = cyclable && *fld != Field::Options;
-        if focused && cyclable {
-            spans.push(Span::styled("◀ ", DIM));
+    // What the highlighted field does (in the panel), and the keys for it.
+    let (description, actions): (Option<String>, &[(&str, &str)]) = match &app.setup.panel {
+        Some(panel) => {
+            cursor = connection_panel::draw_rows(app, panel, inner, ports_shown, &mut lines);
+            let field = panel.fields()[panel.focus.min(panel.fields().len() - 1)];
+            let actions: &[(&str, &str)] = match panel.favourite {
+                None => &[
+                    ("Enter", "connect"),
+                    ("Ctrl+S", "save as favourite"),
+                    ("Esc", "back"),
+                ],
+                Some(_) => &[
+                    ("Enter", "connect"),
+                    ("Ctrl+S", "save changes"),
+                    ("Esc", "back"),
+                ],
+            };
+            (Some(field.description().to_string()), actions)
         }
-        spans.push(Span::styled(format!(" {value} "), val_style));
-        if focused && cyclable {
-            spans.push(Span::styled(" ▶", DIM));
-        }
-        if focused && fld.is_text() {
-            let x =
-                inner.x + 3 + 14 + if cyclable { 2 } else { 0 } + 1 + value.chars().count() as u16;
-            cursor = Some((x, inner.y + lines.len() as u16));
-        }
-        if *fld == Field::SerialPort {
-            if let Some(p) = app
-                .setup
-                .ports
-                .iter()
-                .find(|p| p.name.eq_ignore_ascii_case(value.trim()))
-            {
-                spans.push(Span::styled(format!("  {}", p.desc), DIM));
-            } else if !value.trim().is_empty() {
-                spans.push(Span::styled(
-                    "  (not detected right now)",
-                    Style::new().fg(Color::Yellow),
-                ));
-            }
-        }
-        lines.push(Line::from(spans));
-    }
-
-    if app.saved.connection.mode == crate::config::ConnMode::Serial {
-        lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(
-            "   Detected ports (refreshes every 2 s)",
-            DIM,
-        )));
-        if app.setup.ports.is_empty() {
-            lines.push(Line::from(Span::styled(
-                "     none found. Plug in the device or USB adapter.",
-                Style::new().fg(Color::Yellow),
-            )));
-        }
-        for p in app.setup.ports.iter().take(ports_shown) {
-            lines.push(Line::from(vec![
-                Span::styled(format!("     {:<8}", p.name), Style::new().fg(Color::White)),
-                Span::styled(p.desc.clone(), DIM),
-            ]));
-        }
-        let hidden = app.setup.ports.len() - ports_shown;
-        if hidden > 0 {
-            lines.push(Line::from(Span::styled(
-                format!("     … and {hidden} more. ←→ on Serial port goes through them all."),
-                DIM,
-            )));
-        }
-    }
-
-    // What the highlighted field does.
-    let description = match focused_row {
-        Some(Row::Favourite(_)) => Some("Its connection and options are shown below.".into()),
-        Some(Row::Field(fld)) => Some(fld.description().to_string()),
-        None => None,
+        None => (None, draw_list(app, inner.width, &mut lines)),
     };
+
     if let Some(description) = description {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
@@ -408,11 +343,6 @@ fn draw_setup(f: &mut Frame, app: &App) {
             Span::styled("   Esc cancels", DIM),
         ]));
     } else {
-        // The actions for the highlighted row, said once, here.
-        let actions: &[(&str, &str)] = match focused_row {
-            Some(Row::Favourite(_)) => &[("Enter", "connect"), ("F2", "rename"), ("Del", "remove")],
-            _ => &[("Enter", "connect"), ("Ctrl+S", "save as favourite")],
-        };
         let mut spans = vec![Span::raw("  ")];
         for (key, what) in actions {
             spans.push(Span::raw(" "));
@@ -439,6 +369,33 @@ fn draw_setup(f: &mut Frame, app: &App) {
     f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
     if let Some(c) = cursor {
         f.set_cursor_position(c);
+    }
+}
+
+/// The list: "New connection", then the favourites. Returns the
+/// highlighted row's keys.
+fn draw_list(
+    app: &App,
+    width: u16,
+    lines: &mut Vec<Line<'static>>,
+) -> &'static [(&'static str, &'static str)] {
+    let rows = Setup::list_rows(&app.saved);
+    let focus = app.setup.focus.min(rows.len() - 1);
+    lines.push(favourites::new_connection_row(focus == 0));
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled("   Favourites", DIM)));
+    if app.saved.favourites.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "     None yet. Open New connection, fill it in and press Ctrl+S.",
+            DIM,
+        )));
+    }
+    for i in 0..app.saved.favourites.len() {
+        lines.push(favourites::row(&app.saved, i, focus == i + 1, width));
+    }
+    match rows[focus] {
+        ListRow::New => &[("Enter", "new connection")],
+        ListRow::Favourite(_) => &[("Enter", "connect"), ("E", "edit"), ("Del", "remove")],
     }
 }
 
@@ -486,7 +443,13 @@ mod tests {
         let (cfg, notes) = crate::config::load(&paths).unwrap();
         let mut saved = crate::config::Saved::default();
         saved.connection.mode = crate::config::ConnMode::Serial;
-        let mut app = App::new(cfg, paths, saved, notes, true);
+        let mut app = App::new(cfg, paths, saved.clone(), notes, true);
+        // The ports are listed in a serial connection's panel.
+        app.setup.panel = Some(crate::app::setup::Panel::new(
+            None,
+            String::new(),
+            saved.connection,
+        ));
         app.setup.ports = (1..=ports)
             .map(|n| PortInfo {
                 name: format!("COM{n}"),

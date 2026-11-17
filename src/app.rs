@@ -7,7 +7,7 @@ pub mod identity;
 pub mod setup;
 pub mod update_prompt;
 
-use setup::{Row, Setup, connection_settings, profile_key, scan_ports};
+use setup::{Setup, connection_settings, profile_key, scan_ports};
 
 use crate::config::{self, Config, Saved};
 use crate::extract::Extractor;
@@ -75,9 +75,9 @@ impl App {
             screen: Screen::Setup,
             setup: Setup {
                 focus: 0,
+                panel: None,
                 ports: Vec::new(),
                 error: None,
-                options_open: false,
                 last_scan: None,
             },
             monitor: None,
@@ -104,7 +104,7 @@ impl App {
     }
 
     /// Enter on the start screen (or a connection given on the command line):
-    /// check the settings, then open the connection in the background.
+    /// check `saved.connection`, then open it in the background.
     pub fn request_connect(&mut self) {
         if self.connecting.is_some() {
             return;
@@ -119,10 +119,12 @@ impl App {
     fn rescan_ports(&mut self) {
         self.setup.ports = scan_ports();
         self.setup.last_scan = Some(Instant::now());
-        if self.saved.connection.serial_port.trim().is_empty()
+        // A new connection's panel starts on the first port found.
+        if let Some(panel) = self.setup.panel.as_mut()
+            && panel.connection.serial_port.trim().is_empty()
             && let Some(p) = self.setup.ports.first()
         {
-            self.saved.connection.serial_port = p.name.clone();
+            panel.connection.serial_port = p.name.clone();
         }
     }
 
@@ -187,10 +189,9 @@ impl App {
                 }
             }
             Screen::Setup => {
-                if let Some(Row::Field(f)) = self.focused_row()
-                    && let Some(t) = self.text_mut(f)
-                {
-                    t.push_str(text.lines().next().unwrap_or("").trim());
+                if let Some(panel) = self.setup.panel.as_mut() {
+                    let field = panel.focused_field();
+                    panel.paste(field, &text);
                 }
             }
         }
@@ -292,6 +293,7 @@ impl App {
         ));
         self.monitor = Some(m);
         self.screen = Screen::Monitor;
+        self.setup.panel = None;
         self.setup.error = None;
         self.store_state_reporting();
         crate::set_title(&format!("RawTap - {}", settings.describe()));

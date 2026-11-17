@@ -1,10 +1,13 @@
-//! Favourites: named connections listed at the top of the start screen.
+//! Favourites: named connections listed on the start screen under
+//! "New connection".
 //!
 //! A favourite keeps any kind of connection; its view and other options are
-//! the connection's own (the start screen's Options). They're saved with Ctrl+S on the start screen or F1 → "Save as favourite…" in a
-//! session, edited with F2, removed with Del, and opened from the command
-//! line with `rawtap open "<name>"`. They live in state.json.
+//! the connection's own (the panel's Options). They're saved with Ctrl+S in
+//! the connection panel or F1 → "Save as favourite…" in a session, edited
+//! with E or F2 (the panel again), removed with Del, and opened from the
+//! command line with `rawtap open "<name>"`. They live in state.json.
 
+use super::setup::Panel;
 use super::{App, Screen};
 use crate::config::{Connection, Favourite, Saved};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -18,6 +21,7 @@ pub fn describe(connection: &Connection) -> String {
 }
 
 pub enum FavouriteDialog {
+    /// F1 → "Save as favourite…" in a session: just the name.
     Edit(Box<FavouriteForm>),
     /// Del on a favourite: Enter removes it, Esc keeps it.
     Remove(usize),
@@ -56,7 +60,7 @@ pub fn open_by_name(saved: &mut Saved, name: &str) -> Result<(), String> {
     }
     if saved.favourites.is_empty() {
         return Err(format!(
-            "There's no favourite called \"{name}\": there are no favourites yet. Save one on the start screen with Ctrl+S."
+            "There's no favourite called \"{name}\": there are no favourites yet. Save one on the start screen: New connection, then Ctrl+S."
         ));
     }
     let names: Vec<String> = saved
@@ -71,17 +75,6 @@ pub fn open_by_name(saved: &mut Saved, name: &str) -> Result<(), String> {
 }
 
 impl App {
-    /// Ctrl+S on the start screen: save what's on the form. A connection
-    /// that's already a favourite opens that favourite instead.
-    pub(super) fn save_form_as_favourite(&mut self) {
-        let connection = self.saved.connection.clone();
-        if let Err(error) = super::setup::connection_settings(&connection) {
-            self.setup.error = Some(format!("Can't save this as a favourite yet: {error}"));
-            return;
-        }
-        self.open_favourite_form(connection);
-    }
-
     /// F1 → "Save as favourite…": the session's connection.
     pub(crate) fn save_session_as_favourite(&mut self) {
         self.open_favourite_form(self.saved.connection.clone());
@@ -111,17 +104,77 @@ impl App {
         self.favourite_dialog = Some(FavouriteDialog::Edit(Box::new(form)));
     }
 
-    /// F2 on a favourite.
+    /// Enter on a favourite in the list: connect to it.
+    pub(super) fn connect_favourite(&mut self, i: usize) {
+        if let Some(f) = self.saved.favourites.get(i) {
+            self.saved.connection = f.connection.clone();
+            self.request_connect();
+        }
+    }
+
+    /// E or F2 on a favourite: the connection panel, to change any of it.
     pub(super) fn edit_favourite(&mut self, i: usize) {
         let Some(f) = self.saved.favourites.get(i) else {
             return;
         };
-        self.favourite_dialog = Some(FavouriteDialog::Edit(Box::new(FavouriteForm {
-            index: Some(i),
-            connection: f.connection.clone(),
-            name: f.name.clone(),
-            error: None,
-        })));
+        self.setup.error = None;
+        self.setup.panel = Some(Panel::new(Some(i), f.name.clone(), f.connection.clone()));
+    }
+
+    /// Ctrl+S in the connection panel: save it as a new favourite, or the
+    /// changes to the one being edited, then go back to the list with it
+    /// highlighted.
+    pub(super) fn save_panel(&mut self) {
+        let Some(panel) = self.setup.panel.as_mut() else {
+            return;
+        };
+        if let Err(error) = super::setup::connection_settings(&panel.connection) {
+            self.setup.error = Some(format!("Can't save this as a favourite yet: {error}"));
+            return;
+        }
+        let name = panel.name.trim().to_string();
+        if name.is_empty() {
+            panel.name = describe(&panel.connection);
+            panel.move_focus(0);
+            self.setup.error =
+                Some("Give it a name (here's a suggestion), then press Ctrl+S again.".into());
+            return;
+        }
+        let other = |i: &usize| Some(*i) != panel.favourite;
+        if let Some(i) = find_by_name(&self.saved, &name).filter(other) {
+            panel.move_focus(0);
+            self.setup.error = Some(format!(
+                "There's already a favourite called \"{}\".",
+                self.saved.favourites[i].name
+            ));
+            return;
+        }
+        if let Some(i) = find(&self.saved, &panel.connection).filter(other) {
+            self.setup.error = Some(format!(
+                "This connection is already saved as \"{}\".",
+                self.saved.favourites[i].name
+            ));
+            return;
+        }
+        let favourite = Favourite {
+            name: name.clone(),
+            connection: panel.connection.clone(),
+        };
+        let index = match panel.favourite {
+            Some(i) => {
+                self.saved.favourites[i] = favourite;
+                i
+            }
+            None => {
+                self.saved.favourites.push(favourite);
+                self.saved.favourites.len() - 1
+            }
+        };
+        log::info!("Saved favourite \"{name}\"");
+        self.setup.panel = None;
+        self.setup.error = None;
+        self.setup.focus = index + 1;
+        self.store_state_reporting();
     }
 
     /// Del on a favourite.
@@ -200,7 +253,7 @@ impl App {
         self.favourite_dialog = None;
         log::info!("Saved favourite \"{name}\"");
         match self.screen {
-            Screen::Setup => self.setup.focus = index,
+            Screen::Setup => self.setup.focus = index + 1,
             Screen::Monitor => {
                 if let Some(m) = self.monitor.as_mut() {
                     m.set_status(format!("Saved favourite \"{name}\""), false);
@@ -221,11 +274,11 @@ impl App {
         self.store_state_reporting();
     }
 
-    /// Where the start screen's highlight starts: on the favourite that
-    /// matches the last connection, else the form's first field.
+    /// The start screen as it opens: the list, highlighting the favourite
+    /// that matches the last connection, else "New connection".
     pub(super) fn home_focus(&mut self) {
-        self.setup.focus =
-            find(&self.saved, &self.saved.connection).unwrap_or(self.saved.favourites.len());
+        self.setup.panel = None;
+        self.setup.focus = find(&self.saved, &self.saved.connection).map_or(0, |i| i + 1);
     }
 }
 

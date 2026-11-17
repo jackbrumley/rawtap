@@ -215,10 +215,17 @@ fn drive_a_switch() {
     let mut app = App::new(cfg, paths, saved, notes, false);
     let none = KeyModifiers::NONE;
 
-    // Start screen: open Options (5th row for TCP), set char delay to 2 ms before connecting.
-    for _ in 0..4 {
-        key(&mut app, KeyCode::Down, none);
-    }
+    // Start screen: New connection (TCP, the last type used) with the
+    // switch's address, then open Options and set char delay to 2 ms
+    // before connecting.
+    key(&mut app, KeyCode::Enter, none);
+    key(&mut app, KeyCode::Down, none); // Connection
+    key(&mut app, KeyCode::Down, none); // Host
+    typ(&mut app, "127.0.0.1");
+    key(&mut app, KeyCode::Down, none); // TCP port
+    typ(&mut app, &port.to_string());
+    key(&mut app, KeyCode::Down, none); // Log to file
+    key(&mut app, KeyCode::Down, none); // Options
     key(&mut app, KeyCode::Enter, none); // on Options: expands instead of connecting
     key(&mut app, KeyCode::Down, none);
     key(&mut app, KeyCode::Down, none); // Char delay

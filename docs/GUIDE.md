@@ -8,11 +8,11 @@ Everything lives in one folder, on Linux and Windows alike: `~/.config/rawtap` (
 
 ## Favourites
 
-Save any connection (serial port, TCP client or server, Telnet, SSH) with a name, and it's listed at the top of the start screen.
+Save any connection (serial port, TCP client or server, Telnet, SSH) with a name, and it's listed on the start screen under **+ New connection**.
 
-- **Ctrl+S** on the start screen saves what's on the form. The name starts as what it connects to (`SSH admin@10.0.0.5:22`); type over it.
+- **+ New connection** opens an empty connection panel (only the connection type is the one you used last). **Enter** connects without saving; **Ctrl+S** saves it as a favourite (with no name yet, it suggests one, such as `SSH admin@10.0.0.5:22`; press Ctrl+S again to keep it). **Esc** goes back to the list (twice if there are unsaved changes).
 - **F1 → Save as favourite…** in a session saves the connection you're in.
-- On the start screen, **↑↓** onto a favourite fills the form with it and its options; **Enter** connects, **F2** renames it, **Del** removes it (after asking).
+- On the start screen, **↑↓** moves through the list without changing anything. On a favourite, **Enter** connects, **E** (or F2) opens it in the panel to change its name, connection or options, and **Del** removes it (after asking).
 - A favourite opens in its connection's view (Options ▸ View, below), so a switch can always open in the terminal.
 - From the command line: `rawtap open "Core switch"` (any case).
 
@@ -66,7 +66,7 @@ The **Debug** section at the bottom has what a bug report needs: *Copy log* (Raw
 
 A short description of the highlighted item is shown at the bottom. On screen, the footer shows only F1 Menu, F4 Live keys, Ctrl+N New connection and Ctrl+Q Quit.
 
-The start screen has an **Options ▸** row (←→ or Enter to open it). It shows the line ending, char delay, send mode and view remembered for the selected port or host, so you can set them before connecting. The view is **Last used** (whichever you used last) or always **Terminal**, **Split** or **Hex** for that connection. The line under the form lists what Enter and the other keys do for the highlighted row.
+The connection panel has an **Options ▸** row (←→ or Enter to open it). It shows the line ending, char delay, send mode and view remembered for the selected port or host, so you can set them before connecting. The view is **Last used** (whichever you used last) or always **Terminal**, **Split** or **Hex** for that connection. The line under the panel lists what Enter and the other keys do for the highlighted row.
 
 ## Mouse, copy and paste
 

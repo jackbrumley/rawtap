@@ -6,6 +6,8 @@ use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{Terminal, backend::TestBackend};
 use std::io::{Read, Write};
 
+mod favourites;
+
 fn key(app: &mut App, code: KeyCode) {
     app.on_event(Event::Key(KeyEvent::new(code, KeyModifiers::NONE)));
 }
@@ -14,6 +16,16 @@ fn typ(app: &mut App, s: &str) {
         key(app, KeyCode::Char(c));
     }
 }
+/// In a new connection's panel (TCP, Telnet or SSH): the host, then the
+/// field under it.
+fn fill_host_and_port(app: &mut App, host: &str, port: &str) {
+    key(app, KeyCode::Down); // Connection
+    key(app, KeyCode::Down); // Host
+    typ(app, host);
+    key(app, KeyCode::Down);
+    typ(app, port);
+}
+
 fn dump(t: &Terminal<TestBackend>, title: &str) {
     let buf = t.backend().buffer();
     println!("===== {title}");
@@ -35,102 +47,6 @@ fn screen_text(t: &Terminal<TestBackend>) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-#[test]
-fn favourites_save_list_fill_the_form_edit_and_remove() {
-    let dir = std::env::temp_dir().join(format!("rawtap_fav_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let paths = paths::Paths::at(dir.clone());
-    let (cfg, _) = config::load(&paths).unwrap();
-    let saved = config::Saved {
-        connection: config::Connection {
-            mode: ConnMode::Ssh,
-            ssh_host: "10.0.0.5".into(),
-            ssh_user: "admin".into(),
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    let mut app = App::new(cfg, paths, saved, Vec::new(), true);
-    let mut t = Terminal::new(TestBackend::new(100, 34)).unwrap();
-    let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
-
-    // Ctrl+S suggests what it connects to as the name; type a better one.
-    app.on_event(Event::Key(ctrl_s));
-    for _ in 0.."SSH admin@10.0.0.5:22".len() {
-        key(&mut app, KeyCode::Backspace);
-    }
-    typ(&mut app, "Core switch");
-    t.draw(|f| ui::draw(f, &mut app)).unwrap();
-    dump(&t, "save as favourite");
-    key(&mut app, KeyCode::Enter);
-    assert!(app.favourite_dialog.is_none());
-    assert_eq!(app.saved.favourites[0].name, "Core switch");
-
-    // A second one: the same connection again says which favourite it is.
-    app.on_event(Event::Key(ctrl_s));
-    let Some(app::favourites::FavouriteDialog::Edit(form)) = &app.favourite_dialog else {
-        panic!("no dialog");
-    };
-    assert_eq!(form.index, Some(0));
-    key(&mut app, KeyCode::Esc);
-    key(&mut app, KeyCode::Down); // onto the form
-    key(&mut app, KeyCode::Right); // SSH -> Serial
-    key(&mut app, KeyCode::Right); // -> TCP client
-    key(&mut app, KeyCode::Down);
-    typ(&mut app, "192.168.1.50");
-    key(&mut app, KeyCode::Down);
-    typ(&mut app, "9100");
-    app.on_event(Event::Key(ctrl_s));
-    typ(&mut app, " printer");
-    key(&mut app, KeyCode::Enter);
-    assert_eq!(
-        app.saved.favourites[1].name,
-        "TCP 192.168.1.50:9100 printer"
-    );
-    assert_eq!(app.setup.focus, 1);
-    t.draw(|f| ui::draw(f, &mut app)).unwrap();
-    dump(&t, "two favourites");
-    let text = screen_text(&t);
-    assert!(text.contains("Favourites"));
-    assert!(text.contains("Core switch"));
-    assert!(text.contains("SSH admin@10.0.0.5:22"));
-
-    // Moving onto a favourite fills the form.
-    key(&mut app, KeyCode::Up);
-    assert_eq!(app.saved.connection.mode, ConnMode::Ssh);
-    assert_eq!(app.saved.connection.ssh_host, "10.0.0.5");
-
-    // F2 renames; a clashing name is refused.
-    key(&mut app, KeyCode::F(2));
-    for _ in 0.."Core switch".len() {
-        key(&mut app, KeyCode::Backspace);
-    }
-    typ(&mut app, "tcp 192.168.1.50:9100 PRINTER");
-    key(&mut app, KeyCode::Enter);
-    t.draw(|f| ui::draw(f, &mut app)).unwrap();
-    assert!(screen_text(&t).contains("There's already a favourite called"));
-    key(&mut app, KeyCode::Esc);
-
-    // Del asks first; Esc keeps it, Enter removes it.
-    key(&mut app, KeyCode::Delete);
-    t.draw(|f| ui::draw(f, &mut app)).unwrap();
-    dump(&t, "remove?");
-    assert!(screen_text(&t).contains("Remove \"Core switch\""));
-    key(&mut app, KeyCode::Esc);
-    assert_eq!(app.saved.favourites.len(), 2);
-    key(&mut app, KeyCode::Delete);
-    key(&mut app, KeyCode::Enter);
-    assert_eq!(app.saved.favourites.len(), 1);
-
-    // Saved in state.json, and `rawtap open` finds it by name.
-    let (mut reloaded, _) = config::load_saved(&paths::Paths::at(dir.clone())).unwrap();
-    assert_eq!(reloaded.favourites.len(), 1);
-    app::favourites::open_by_name(&mut reloaded, "TCP 192.168.1.50:9100 printer").unwrap();
-    assert_eq!(reloaded.connection.tcp_port, "9100");
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -180,6 +96,7 @@ fn update_dialog_sits_over_the_start_screen_box_in_a_tall_window() {
         ..Default::default()
     };
     let mut app = App::new(cfg, paths, saved, Vec::new(), true);
+    key(&mut app, KeyCode::Enter); // New connection: the taller box
     app.update_prompt = Some(app::update_prompt::UpdatePrompt::new(update::UpdateCheck {
         current_version: "0.7.2".into(),
         latest_version: "0.7.3".into(),
@@ -226,7 +143,9 @@ fn connecting_shows_a_spinner_then_the_error() {
     app.setup.error = Some("an earlier error".into());
     let mut t = Terminal::new(TestBackend::new(100, 30)).unwrap();
 
-    key(&mut app, KeyCode::Enter);
+    key(&mut app, KeyCode::Enter); // New connection: TCP, the last type used
+    fill_host_and_port(&mut app, "127.0.0.1", &port.to_string());
+    key(&mut app, KeyCode::Enter); // connect
     t.draw(|f| ui::draw(f, &mut app)).unwrap();
     let screen = screen_text(&t);
     assert!(screen.contains("Connecting to TCP 127.0.0.1"), "{screen}");
@@ -339,19 +258,29 @@ fn the_view_switch_is_clickable_and_follows_you() {
     let paths = paths::Paths::at(dir.clone());
     let (cfg, _) = config::load(&paths).unwrap();
     let mut app = App::new(cfg, paths, saved, Vec::new(), true);
-    app.setup.options_open = true;
-    app.setup.focus = app::setup::Setup::rows(&app.saved, true)
+    app.setup.focus = 0;
+    key(&mut app, KeyCode::Enter); // New connection
+    let (host, port) = (
+        app.saved.connection.tcp_host.clone(),
+        app.saved.connection.tcp_port.clone(),
+    );
+    fill_host_and_port(&mut app, &host, &port);
+    let panel = app.setup.panel.as_mut().unwrap();
+    panel.options_open = true;
+    panel.focus = panel
+        .fields()
         .iter()
-        .position(|r| *r == app::setup::Row::Field(app::setup::Field::OptLayout))
+        .position(|f| *f == app::setup::Field::OptLayout)
         .unwrap();
     for _ in 0..3 {
         key(&mut app, KeyCode::Right); // Last used -> Terminal -> Split -> Hex
     }
-    assert_eq!(app.field_value(app::setup::Field::OptLayout), "Hex");
+    let panel = app.setup.panel.as_ref().unwrap();
+    assert_eq!(app.field_value(panel, app::setup::Field::OptLayout), "Hex");
     let mut t = Terminal::new(TestBackend::new(100, 34)).unwrap();
     t.draw(|f| ui::draw(f, &mut app)).unwrap();
     dump(&t, "a connection's own view");
-    app.request_connect();
+    key(&mut app, KeyCode::Enter); // connect
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     while app.monitor.is_none() && std::time::Instant::now() < deadline {
         app.tick();
@@ -419,8 +348,12 @@ fn walkthrough() {
     let mut t = Terminal::new(TestBackend::new(100, 30)).unwrap();
 
     t.draw(|f| ui::draw(f, &mut app)).unwrap();
-    dump(&t, "setup (serial)");
+    dump(&t, "start screen");
 
+    key(&mut app, KeyCode::Enter); // New connection
+    t.draw(|f| ui::draw(f, &mut app)).unwrap();
+    dump(&t, "new connection (serial)");
+    key(&mut app, KeyCode::Down); // Name -> Connection
     key(&mut app, KeyCode::Right); // -> TCP client
     key(&mut app, KeyCode::Down);
     typ(&mut app, "127.0.0.1");

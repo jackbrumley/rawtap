@@ -1,5 +1,5 @@
-//! Drawing favourites: their rows on the start screen, and the dialog that
-//! saves, edits or removes one.
+//! Drawing the start screen's list (New connection and the favourites), and
+//! the dialogs that name a session's connection or remove a favourite.
 
 use super::{DIM, dim, truncate, wrap_words};
 use crate::app::favourites::{self, FavouriteDialog, FavouriteForm};
@@ -14,20 +14,35 @@ use ratatui::{
 
 const NAME_WIDTH: usize = 24;
 
+fn name_style(focused: bool) -> Style {
+    if focused {
+        Style::new().fg(Color::Black).bg(Color::Cyan)
+    } else {
+        Style::new().fg(Color::White)
+    }
+}
+
+fn marker(focused: bool) -> &'static str {
+    if focused { " ▶ " } else { "   " }
+}
+
+/// The list's first row, which opens an empty connection panel.
+pub(super) fn new_connection_row(focused: bool) -> Line<'static> {
+    let label = "+ New connection";
+    Line::from(vec![
+        Span::styled(marker(focused), Style::new().fg(Color::Cyan)),
+        Span::styled(format!(" {label:<NAME_WIDTH$} "), name_style(focused)),
+    ])
+}
+
 /// One favourite on the start screen: name, what it connects to, and its
 /// view when it's fixed.
 pub(super) fn row(saved: &Saved, i: usize, focused: bool, width: u16) -> Line<'static> {
     let f = &saved.favourites[i];
-    let marker = if focused { " ▶ " } else { "   " };
-    let name_style = if focused {
-        Style::new().fg(Color::Black).bg(Color::Cyan)
-    } else {
-        Style::new().fg(Color::White)
-    };
     let name = truncate(&f.name, NAME_WIDTH);
     let mut spans = vec![
-        Span::styled(marker, Style::new().fg(Color::Cyan)),
-        Span::styled(format!(" {name:<NAME_WIDTH$} "), name_style),
+        Span::styled(marker(focused), Style::new().fg(Color::Cyan)),
+        Span::styled(format!(" {name:<NAME_WIDTH$} "), name_style(focused)),
         Span::raw("  "),
     ];
     // What it connects to, unless the name already says it.
