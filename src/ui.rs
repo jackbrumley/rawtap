@@ -188,11 +188,11 @@ struct SetupLayout {
 }
 
 /// The list's rows: "New connection", a gap, the "Favourites" heading, the
-/// favourites (or a line saying how to save one), then, when there are any,
-/// a gap, the "Recent" heading and the recent connections.
+/// favourites (or a line saying how to save one), a gap, the "Recent"
+/// heading and the recent connections (or a line saying what goes there).
 fn list_rows(app: &App) -> usize {
     let recent = crate::app::recent::visible(&app.saved).len();
-    3 + app.saved.favourites.len().max(1) + if recent > 0 { 2 + recent } else { 0 }
+    3 + app.saved.favourites.len().max(1) + 2 + recent.max(1)
 }
 
 fn setup_layout(app: &App, full: Rect) -> SetupLayout {
@@ -429,13 +429,17 @@ fn draw_list(
     for i in 0..app.saved.favourites.len() {
         push(lines, ListRow::Favourite(i));
     }
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled("   Recent", DIM)));
     let recent = crate::app::recent::visible(&app.saved);
-    if !recent.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled("   Recent", DIM)));
-        for i in recent {
-            push(lines, ListRow::Recent(i));
-        }
+    if recent.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "     Connections you open (other than favourites) appear here.",
+            DIM,
+        )));
+    }
+    for i in recent {
+        push(lines, ListRow::Recent(i));
     }
     match rows[focus] {
         ListRow::New => &[("Enter", "new connection")],

@@ -42,6 +42,7 @@ fn favourites_new_connection_save_edit_and_remove() {
     dump(&t, "empty list");
     assert!(screen_text(&t).contains("New connection"));
     assert!(screen_text(&t).contains("None yet."));
+    assert!(screen_text(&t).contains("Connections you open"));
 
     // New connection opens an empty panel: only the type (SSH) is the last
     // one used, so it's never a copy of a favourite. Ctrl+S with no name
