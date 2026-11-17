@@ -146,8 +146,9 @@ pub struct Monitor {
     /// The user changed the view in this session: it becomes the "last used"
     /// view. A favourite's fixed view isn't, unless the user picks it.
     pub view_chosen: bool,
-    /// Where the footer drew each view word, for clicks.
-    pub footer_views: Vec<(Rect, Layout)>,
+    /// Where the footer drew the current view's name, for a click, which
+    /// changes to the next view as F3 does.
+    pub footer_view: Option<Rect>,
     pub link: Option<Link>,
     pub logger: Option<Logger>,
     pub transcript: Option<Transcript>,
@@ -242,7 +243,7 @@ impl Monitor {
             profile,
             layout,
             view_chosen: false,
-            footer_views: Vec::new(),
+            footer_view: None,
             link: None,
             logger: None,
             transcript: None,

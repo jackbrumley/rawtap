@@ -55,16 +55,17 @@ In live keys, anything typed while the cursor is just after a `Password:` / `Pas
 
 ## Menu (F1)
 
-**F1** opens a menu in the middle of the screen. The menu lists every action, macro and setting for this connection.
+**F1** opens a menu in the middle of the screen. It lists its sections (Session, Send, Copy & paste, View, This connection, Macros, Updates, Debug), each with a hint of what's inside, then *Keyboard shortcuts* and *Quit*.
 - **↑↓** to move.
+- **Enter** (or **→**) opens a section; **Esc** goes back to the sections.
 - **←→** changes a setting straight away. That includes the on/off switches: live keys, raw log following/paused and the PgUp/PgDn scroll pane. The menu stays open.
 - **Enter** runs an action.
-- **Typing** filters the list (`delay`, `break`, `save`...).
-- **Esc** closes it.
+- **Typing** searches every section at once (`delay`, `break`, `save`...); each result shows its section, such as *This connection › Char delay*.
+- **Esc** clears the search, then goes back, then closes the menu.
 
 The **Debug** section at the bottom has what a bug report needs: *Copy log* (RawTap's own session log), *Open log folder*, *Copy system info* and the *Log level*.
 
-A short description of the highlighted item is shown at the bottom. On screen, the footer shows only F1 Menu, F4 Live keys, Ctrl+N New connection and Ctrl+Q Quit.
+A short description of the highlighted item is shown at the bottom. On screen, the footer shows only F1 Menu, F3 View, F4 Live keys, F8 Hex format (when the Hex pane shows), Ctrl+N New connection and Ctrl+Q Quit.
 
 The connection panel has an **Options ▸** row (←→ or Enter to open it). It shows the line ending, char delay, send mode and view remembered for the selected port or host, so you can set them before connecting. The view is **Last used** (whichever you used last) or always **Terminal**, **Split** or **Hex** for that connection. The line under the panel lists what Enter and the other keys do for the highlighted row.
 
@@ -77,12 +78,13 @@ These follow Windows Terminal conventions:
 | Scroll back | Mouse wheel over either pane scrolls that pane; nothing is sent to the device |
 | Select | Drag in the terminal or raw log pane. Only that pane's text is selected, with no borders. To go beyond one screen, drag past the top or bottom edge (it auto-scrolls) or use the wheel while dragging. **Ctrl+click** extends an existing selection; scroll first if you need to. |
 | Raw log copies | Always whole entries, in full log-file form (`[time] RX HEX: …` / `RX TEXT: …`), even if the screen shows the compact view. Hidden sends stay `<hidden>`. |
-| Copy | **Right-click** while something is selected. |
+| Select all | **Alt+A** selects and copies the whole pane you're in: the terminal with its scrollback, or every raw log entry. In line mode **Ctrl+A** (or Ctrl+Shift+A) does too; in live keys Ctrl+A goes to the device (most terminals send Ctrl+Shift+A as Ctrl+A). Also **F1 → Select all**. |
+| Copy | **Automatic:** a selection is copied as soon as you let go of the mouse (or select all), and stays highlighted. **Ctrl+C** or **right-click** on a selection copies it again and clears the highlight. Ctrl+C copies only while there's a selection; otherwise it does what it always does. GNOME Terminal keeps **Ctrl+Shift+C** for its own copy, which can't see RawTap's selection, so use Ctrl+C. |
 | Paste | **Right-click** with nothing selected (your terminal's own paste works too). One line goes into the send box (in live keys, straight to the device). **Several lines ask for confirmation**, then go line by line with the line ending and the char delay. |
 | Long output | F1 → *Copy all terminal output*, or *Open transcript* (Notepad on Windows, your default text app on Linux) |
 | The console's own selection | **Shift+drag** |
 
-**Ctrl+Q** quits, from the start screen, a session or the menu. In live keys every key goes to the device, so press **F4** to leave live keys first. Ctrl+C never quits. (In Windows Terminal, Shift+click is taken by the console's own selection, which is why extending uses Ctrl+click.)
+**Ctrl+Q** quits, from the start screen, a session or the menu. In live keys every key goes to the device, but the F1 menu still works: **F1, then Ctrl+Q** quits (and **F1, then Ctrl+N** starts a new connection). Searching the menu for "exit" finds Quit too. Ctrl+C never quits; with a selection it copies. (In Windows Terminal, Shift+click is taken by the console's own selection, which is why extending uses Ctrl+click.)
 
 ## Shortcut keys
 
@@ -166,12 +168,12 @@ Same settings as the Python version (`image_extraction` in the config), plus:
 | `src/link.rs` | serial, TCP client and TCP server (a reader thread each), and break |
 | `src/term.rs` | terminal emulation (vt100), live-key encoding, plain-text cleaner and transcript |
 | `src/macros.rs` | macro keys and the step runner |
-| `src/menu.rs` | the F1 menu: items, descriptions, search |
+| `src/menu.rs` | the F1 menu: sections, items, descriptions, search |
 | `src/clip.rs` | clipboard (in-memory during tests) |
 | `src/monitor.rs` | monitor state: raw log grouping, sending, live keys, hidden send, macros |
 | `src/monitor/view.rs`, `src/monitor/keys.rs` | panes, mouse, copy and paste / commands, the F1 menu and keys |
 | `src/ui_monitor.rs` | drawing the monitor: layouts and header |
-| `src/ui_monitor/panes.rs`, `src/ui_monitor/controls.rs` | drawing the raw log and terminal / the send box, footer, menu and help |
+| `src/ui_monitor/panes.rs`, `src/ui_monitor/controls.rs`, `src/ui_monitor/menu_popup.rs` | drawing the raw log and terminal / the send box, footer and help / the F1 menu |
 | `src/app.rs`, `src/ui.rs` | start screen and app wiring |
 | `src/app/form.rs`, `src/app/setup.rs` | the start screen's keys and fields / its rows and connection settings |
 | `src/app/favourites.rs`, `src/ui/favourites.rs` | favourites: saving, editing, removing, `rawtap open` / their rows and dialog |

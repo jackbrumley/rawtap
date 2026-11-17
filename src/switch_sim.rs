@@ -350,6 +350,12 @@ fn drive_a_switch() {
         t.x + 40,
         t.y + r + 1,
     );
+    // Letting go copies it straight away and keeps it highlighted.
+    assert_eq!(
+        crate::clip::get().unwrap(),
+        "interface GigabitEthernet1/0/20\n description port 20"
+    );
+    assert!(app.monitor.as_ref().unwrap().selection.is_some());
     dump(
         &mut app,
         160,
@@ -376,13 +382,15 @@ fn drive_a_switch() {
             "highlight leaked outside the pane"
         );
     }
-    // Right-click copies the selection.
+    // Right-click copies it again and clears the highlight.
+    crate::clip::set("something else").unwrap();
     mouse(
         &mut app,
         MouseEventKind::Down(MouseButton::Right),
         t.x + 1,
         t.y + 1,
     );
+    assert!(app.monitor.as_ref().unwrap().selection.is_none());
     let copied = crate::clip::get().unwrap();
     println!("===== copied from terminal pane:\n{copied}\n=====");
     assert_eq!(
@@ -453,6 +461,20 @@ fn drive_a_switch() {
     );
     assert!(long.ends_with("interface GigabitEthernet1/0/24"));
     key(&mut app, KeyCode::End, KeyModifiers::CONTROL); // back to live view
+
+    // ---- In live keys: Alt+A selects the whole terminal, scrollback too;
+    // Ctrl+C copies it (and sends nothing) because there's a selection.
+    // (In line mode Ctrl+A selects all too.)
+    assert!(app.monitor.as_ref().unwrap().live);
+    let tx_before = app.monitor.as_ref().unwrap().tx_bytes;
+    key(&mut app, KeyCode::Char('a'), KeyModifiers::ALT);
+    key(&mut app, KeyCode::Char('c'), KeyModifiers::CONTROL);
+    let all = crate::clip::get().unwrap();
+    assert!(all.contains("hostname Switch"), "{all}");
+    assert!(all.contains("interface GigabitEthernet1/0/24"));
+    assert!(all.lines().count() > n);
+    assert_eq!(app.monitor.as_ref().unwrap().tx_bytes, tx_before);
+    assert!(app.monitor.as_ref().unwrap().selection.is_none());
 
     // ---- Ctrl+click extends a selection across a scroll.
     render(&mut app, 160, 34);
@@ -550,6 +572,12 @@ fn drive_a_switch() {
 
     // ---- Paste: Windows Terminal types a paste in as a burst of keys. Multi-line asks first.
     key(&mut app, KeyCode::F(4), none); // line mode
+    // In line mode Ctrl+A selects the whole pane, and Ctrl+C copies it.
+    key(&mut app, KeyCode::Char('a'), KeyModifiers::CONTROL);
+    assert!(app.monitor.as_ref().unwrap().selection.is_some());
+    key(&mut app, KeyCode::Char('c'), KeyModifiers::CONTROL);
+    assert!(app.monitor.as_ref().unwrap().selection.is_none());
+    assert!(crate::clip::get().unwrap().contains("hostname Switch"));
     let burst: Vec<Event> = "show clock\nshow version\n"
         .chars()
         .map(|c| {
@@ -618,11 +646,35 @@ fn drive_a_switch() {
     pump(&mut app, 50);
     dump(&mut app, 100, 34, "after capture macro + break attempt");
 
-    // The F1 menu: browse, then search for "delay" and change it with →.
+    // Searching the menu for "exit" finds Quit.
+    let exit = crate::menu::Menu {
+        filter: "exit".into(),
+        ..Default::default()
+    };
+    assert!(
+        crate::menu::visible(app.monitor.as_ref().unwrap(), &exit)
+            .iter()
+            .any(|r| matches!(r, crate::menu::Row::Item(i) if i.label == "Quit"))
+    );
+    // The F1 menu: the top level lists the sections, then Quit. Enter opens
+    // a section; Esc goes back to it on the top level.
     key(&mut app, KeyCode::F(1), none);
-    key(&mut app, KeyCode::Down, none);
-    key(&mut app, KeyCode::Down, none);
-    dump(&mut app, 120, 44, "F1 menu, third item selected");
+    dump(&mut app, 120, 44, "F1 menu, top level");
+    key(&mut app, KeyCode::Down, none); // Send
+    key(&mut app, KeyCode::Down, none); // Copy & paste
+    key(&mut app, KeyCode::Enter, none);
+    {
+        let menu = app.monitor.as_ref().unwrap().menu.as_ref().unwrap();
+        assert_eq!(menu.section, Some(crate::menu::section::COPY));
+    }
+    dump(&mut app, 120, 44, "F1 menu, Copy & paste open");
+    key(&mut app, KeyCode::Esc, none);
+    {
+        let menu = app.monitor.as_ref().unwrap().menu.as_ref().unwrap();
+        assert_eq!(menu.section, None);
+        assert_eq!(menu.selected, 2, "back on Copy & paste");
+    }
+    // Search: everything, from every section.
     for c in "delay".chars() {
         key(&mut app, KeyCode::Char(c), none);
     }
@@ -695,16 +747,17 @@ fn drive_a_switch() {
 
     key(&mut app, KeyCode::F(4), none);
     assert!(app.monitor.as_ref().unwrap().live);
-    // One quit key: in live keys Ctrl+Q goes to the device; F4 leaves live
-    // keys, then Ctrl+Q quits.
+    // One quit key: in live keys Ctrl+Q goes to the device, but the F1 menu
+    // takes keys first, so F1 then Ctrl+Q quits.
     key(&mut app, KeyCode::Char('q'), KeyModifiers::CONTROL);
     assert!(
         !app.quit,
         "Ctrl+Q quit from live keys instead of going to the device"
     );
-    key(&mut app, KeyCode::F(4), KeyModifiers::NONE);
+    assert!(app.monitor.as_ref().unwrap().live);
+    key(&mut app, KeyCode::F(1), KeyModifiers::NONE);
     key(&mut app, KeyCode::Char('q'), KeyModifiers::CONTROL);
-    assert!(app.quit, "F4 then Ctrl+Q didn't quit");
+    assert!(app.quit, "F1 then Ctrl+Q didn't quit from live keys");
 
     app.shutdown().unwrap();
     let logs = dir.join("logs");

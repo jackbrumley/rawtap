@@ -1,4 +1,4 @@
-//! Drawing the controls: the send box, the footer, the F1 menu and the help screen.
+//! Drawing the controls: the send box, the footer and the help screen.
 
 use super::*;
 
@@ -164,57 +164,52 @@ pub(super) fn draw_footer(f: &mut Frame, m: &mut Monitor, area: Rect) {
     };
     let txt = |t: &str| Span::raw(format!(" {t}   "));
 
-    // The view switch first, so a narrow window never hides it. Each word is
-    // clickable: its place is kept for `Monitor::on_mouse`.
-    let mut spans = vec![Span::styled(" View ", DIM)];
-    let mut x = area.x + spans[0].width() as u16;
-    m.footer_views.clear();
-    for view in crate::config::VIEWS {
-        let word = format!(" {} ", view.label());
-        let style = if view == m.layout {
-            Style::new()
-                .fg(Color::Black)
-                .bg(Color::Cyan)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::new().fg(Color::Gray)
-        };
-        let width = word.chars().count() as u16;
-        m.footer_views.push((
-            Rect {
-                x,
-                y: area.y,
-                width,
-                height: 1,
-            },
-            view,
-        ));
-        x += width;
-        spans.push(Span::styled(word, style));
-    }
-    spans.push(key("F3"));
-    if m.layout != crate::config::Layout::Terminal {
-        spans.push(Span::styled(
-            format!("  Hex: {} ", m.log_format().label()),
-            DIM,
-        ));
-        spans.push(key("F8"));
-    }
-    spans.push(Span::raw("  │  "));
+    // In key order: the menu, then the view switch (the key, what it does,
+    // then the current view, which a click changes too; its place is kept
+    // for `Monitor::on_mouse`), so a narrow window never hides them.
+    let mut spans = vec![
+        Span::raw(" "),
+        key("F1"),
+        txt("Menu"),
+        key("F3"),
+        Span::raw(" View "),
+    ];
+    let x = area.x + spans.iter().map(|s| s.width() as u16).sum::<u16>();
+    let view = format!(" {} ", m.layout.label());
+    m.footer_view = Some(Rect {
+        x,
+        y: area.y,
+        width: view.chars().count() as u16,
+        height: 1,
+    });
+    spans.push(Span::styled(
+        view,
+        Style::new()
+            .fg(Color::Black)
+            .bg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    ));
+    spans.push(Span::raw("   "));
     spans.extend(if m.live {
-        vec![
-            key("F1"),
-            txt("Menu"),
-            key("F4"),
-            txt("Leave live keys"),
-            Span::styled("Every other key goes to the device", DIM),
-        ]
+        [key("F4"), txt("Leave live keys")]
+    } else {
+        [key("F4"), txt("Live keys")]
+    });
+    if m.layout != crate::config::Layout::Terminal {
+        spans.push(key("F8"));
+        spans.push(Span::raw(" Hex "));
+        spans.push(Span::styled(
+            format!("{}   ", m.log_format().label()),
+            Style::new().fg(Color::White),
+        ));
+    }
+    spans.extend(if m.live {
+        vec![Span::styled(
+            "F1 then Ctrl+Q quits · other keys go to the device",
+            DIM,
+        )]
     } else {
         vec![
-            key("F1"),
-            txt("Menu"),
-            key("F4"),
-            txt("Live keys"),
             key("Ctrl+N"),
             txt("New connection"),
             key("Ctrl+Q"),
@@ -238,162 +233,6 @@ pub(super) fn draw_footer(f: &mut Frame, m: &mut Monitor, area: Rect) {
             Paragraph::new(Line::from(Span::styled(format!("{msg} "), style)).right_aligned()),
             r,
         );
-    }
-}
-
-pub(super) fn draw_menu(f: &mut Frame, m: &Monitor) {
-    let Some(menu) = &m.menu else { return };
-    let items = menu::visible(m, &menu.filter);
-    let sel = menu.selected.min(items.len().saturating_sub(1));
-
-    // Rows: section headers (when not filtering) + items.
-    enum Row<'a> {
-        Header(&'a str),
-        Item(usize),
-    }
-    let mut rows: Vec<Row> = Vec::new();
-    let mut last = "";
-    for (i, it) in items.iter().enumerate() {
-        if menu.filter.trim().is_empty() && it.section != last {
-            if !rows.is_empty() {
-                rows.push(Row::Header(""));
-            }
-            rows.push(Row::Header(it.section));
-            last = it.section;
-        }
-        rows.push(Row::Item(i));
-    }
-
-    let full = f.area();
-    let w = 84.min(full.width.saturating_sub(2)).max(30).min(full.width);
-    let desc_rows = 3u16;
-    let want_h = rows.len() as u16 + 4 + desc_rows + 2;
-    let h = want_h
-        .min(full.height.saturating_sub(2))
-        .max(10.min(full.height));
-    let area = Rect {
-        x: full.x + (full.width.saturating_sub(w)) / 2,
-        y: full.y + 1.min(full.height.saturating_sub(h)),
-        width: w,
-        height: h,
-    };
-    f.render_widget(Clear, area);
-    let block = Block::bordered()
-        .title(Line::from(vec![
-            Span::styled(
-                " RawTap menu ",
-                Style::new()
-                    .fg(Color::Black)
-                    .bg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(format!(" {} ", m.profile_key), DIM),
-        ]))
-        .title_bottom(Line::from(Span::styled(
-            " ↑↓ move   ←→ change   Enter select   type to search   Esc close ",
-            DIM,
-        )))
-        .border_style(Style::new().fg(Color::Cyan));
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-
-    let [search, _gap, list, sep, desc] = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Min(1),
-        Constraint::Length(1),
-        Constraint::Length(desc_rows),
-    ])
-    .areas(inner);
-
-    // Search box
-    let search_line = if menu.filter.is_empty() {
-        Line::from(vec![
-            Span::styled(" › ", Style::new().fg(Color::Cyan)),
-            Span::styled("type to search…", DIM),
-        ])
-    } else {
-        Line::from(vec![
-            Span::styled(" › ", Style::new().fg(Color::Cyan)),
-            Span::raw(menu.filter.clone()),
-        ])
-    };
-    f.render_widget(Paragraph::new(search_line), search);
-    f.set_cursor_position((search.x + 3 + menu.filter.chars().count() as u16, search.y));
-
-    // List, scrolled so the selection is visible.
-    let sel_row = rows
-        .iter()
-        .position(|r| matches!(r, Row::Item(i) if *i == sel))
-        .unwrap_or(0);
-    let lh = list.height as usize;
-    let offset = (sel_row + 1).saturating_sub(lh);
-    let lw = list.width as usize;
-    let key_w = 9usize;
-    let val_w = 16usize;
-    let label_w = lw.saturating_sub(key_w + val_w + 3);
-    let mut lines = Vec::new();
-    for row in rows.iter().skip(offset).take(lh) {
-        match row {
-            Row::Header(t) => lines.push(Line::from(Span::styled(
-                format!(" {t}"),
-                DIM.add_modifier(Modifier::BOLD),
-            ))),
-            Row::Item(i) => {
-                let it = &items[*i];
-                let selected = *i == sel;
-                let value = match (&it.value, selected, it.kind) {
-                    (Some(v), true, Kind::Setting(_)) => format!("◀ {v} ▶"),
-                    (Some(v), _, _) => v.clone(),
-                    _ => String::new(),
-                };
-                let label: String = it.label.chars().take(label_w).collect();
-                let text = format!(" {label:<label_w$} {value:<val_w$} {:>key_w$} ", it.key);
-                let style = if selected {
-                    Style::new().fg(Color::Black).bg(Color::Cyan)
-                } else if it.value.is_some() {
-                    Style::new().fg(Color::White)
-                } else {
-                    Style::new()
-                };
-                if selected {
-                    lines.push(Line::from(Span::styled(text, style)));
-                } else {
-                    lines.push(Line::from(vec![
-                        Span::styled(format!(" {label:<label_w$} "), style),
-                        Span::styled(format!("{value:<val_w$} "), Style::new().fg(Color::Yellow)),
-                        Span::styled(format!("{:>key_w$} ", it.key), DIM),
-                    ]));
-                }
-            }
-        }
-    }
-    if items.is_empty() {
-        lines.push(Line::from(Span::styled(
-            "  Nothing matches. Backspace or Esc to clear the search.",
-            DIM,
-        )));
-    }
-    f.render_widget(Paragraph::new(lines), list);
-
-    f.render_widget(
-        Paragraph::new(Span::styled("─".repeat(sep.width as usize), DIM)),
-        sep,
-    );
-    if let Some(it) = items.get(sel) {
-        let hint = match it.kind {
-            Kind::Setting(_) => "  (←→ to change)",
-            Kind::Cmd(_) => "  (Enter)",
-        };
-        let rows = crate::ui::wrap_words(
-            &format!("{}{hint}", it.desc),
-            desc.width.saturating_sub(2) as usize,
-        );
-        let text: Vec<Line> = rows
-            .into_iter()
-            .map(|r| Line::from(Span::styled(format!(" {r}"), Style::new().fg(Color::Gray))))
-            .collect();
-        f.render_widget(Paragraph::new(text), desc);
     }
 }
 
@@ -422,10 +261,13 @@ pub(super) fn draw_help(f: &mut Frame) {
         ),
         l("         wheel, to keep going) · Ctrl+click extends"),
         l(
-            "         Right-click copies a selection, or pastes when nothing is selected (asks first",
+            "         A selection is copied when you let go · Alt+A (or Ctrl+A in line mode) selects",
         ),
-        l("         if several lines). The Hex pane copies whole entries in full (hex + text)."),
-        l("  In live keys every key goes to the device: F4 leaves live keys, then Ctrl+Q quits."),
+        l("         and copies the whole pane · Ctrl+C or right-click clears the highlight."),
+        l("         Right-click with nothing selected pastes (asks first if several lines)."),
+        l("         The Hex pane copies whole entries in full (hex + text)."),
+        l("  In live keys every key goes to the device, but the F1 menu still works: F1, then"),
+        l("  Ctrl+Q quits or Ctrl+N starts a new connection."),
         l("  Macros: Alt+0..9, Shift+F1..F12, F11, F12 (set in settings.json)"),
         l(""),
         h("Send box"),

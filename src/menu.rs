@@ -17,6 +17,7 @@ pub enum Cmd {
     FocusPane,
     Shortcuts,
     Copy,
+    SelectAll,
     Paste,
     CopyAll,
     OpenTranscript,
@@ -54,6 +55,27 @@ pub enum Kind {
     Setting(Setting),
 }
 
+/// The menu's sections, in the order its top level lists them.
+pub mod section {
+    pub const SESSION: &str = "Session";
+    pub const SEND: &str = "Send";
+    pub const COPY: &str = "Copy & paste";
+    pub const VIEW: &str = "View";
+    pub const CONNECTION: &str = "This connection";
+    pub const MACROS: &str = "Macros";
+    /// Updates and Debug come last, as in every app (App Standard).
+    pub const UPDATES: &str = "Updates";
+    pub const DEBUG: &str = "Debug";
+    pub const ALL: [&str; 8] = [
+        SESSION, SEND, COPY, VIEW, CONNECTION, MACROS, UPDATES, DEBUG,
+    ];
+    /// Keyboard shortcuts: on the top level, not in a section of its own.
+    pub const HELP: &str = "Help";
+}
+
+/// On the top level under the sections, so they're always one step away.
+const PINNED: [Cmd; 2] = [Cmd::Shortcuts, Cmd::Quit];
+
 #[derive(Clone)]
 pub struct Item {
     pub section: &'static str,
@@ -69,8 +91,21 @@ pub struct Item {
 #[derive(Default)]
 pub struct Menu {
     pub filter: String,
-    /// Index into the visible (filtered) items.
+    /// The section that's open; `None` is the top level.
+    pub section: Option<&'static str>,
+    /// Index into the visible rows.
     pub selected: usize,
+}
+
+/// A row of the menu.
+#[derive(Clone)]
+pub enum Row {
+    /// A section on the top level, with a hint of what's in it.
+    Section {
+        name: &'static str,
+        hint: String,
+    },
+    Item(Item),
 }
 
 pub const CHAR_DELAYS: [u64; 6] = [0, 2, 5, 10, 20, 50];
@@ -121,12 +156,11 @@ fn cmd(section: &'static str, label: &str, key: &str, desc: String, c: Cmd) -> I
 pub fn items(m: &Monitor) -> Vec<Item> {
     let serial = matches!(m.settings, LinkSettings::Serial { .. });
     let conn = m.profile_key.clone();
-    let settings_section: &'static str = "SETTINGS FOR THIS CONNECTION";
     let mut v = Vec::new();
 
     // Sending
     v.push(setting(
-        "SEND",
+        section::SEND,
         "Live keys",
         if m.live { "on".into() } else { "off".into() },
         "F4",
@@ -134,7 +168,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         Setting::LiveKeys,
     ));
     v.push(cmd(
-        "SEND",
+        section::SEND,
         "Hidden send (password)",
         "F6",
         "Type something without it being shown, logged or kept in history, then Enter sends it with the line ending. Use it for passwords.".into(),
@@ -142,7 +176,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
     ));
     match m.password_stored() {
         Some(false) => v.push(cmd(
-            "SEND",
+            section::SEND,
             "Remember password…",
             "",
             format!(
@@ -153,7 +187,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
             Cmd::RememberPassword,
         )),
         Some(true) => v.push(cmd(
-            "SEND",
+            section::SEND,
             "Forget password",
             "",
             format!(
@@ -167,7 +201,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
     }
     if matches!(m.settings, crate::link::LinkSettings::Ssh { .. }) {
         v.push(cmd(
-            "SEND",
+            section::SEND,
             "Set up key login",
             "",
             "Once you're logged in to a Linux or Unix server: adds your SSH key to ~/.ssh/authorized_keys there (making a key first if you have none), so the next login needs no password.".into(),
@@ -175,7 +209,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         ));
     }
     v.push(cmd(
-        "SEND",
+        section::SEND,
         if serial { "Send break" } else { "Send break (serial only)" },
         "F7",
         "Holds the serial line in 'break' for 300 ms. Used for password recovery or to drop a switch into ROMMON. Only works on serial ports.".into(),
@@ -195,7 +229,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         }
         desc.push_str(" Esc cancels it while it runs.");
         v.push(cmd(
-            "MACROS",
+            section::MACROS,
             &format!("Macro: {}", mac.label),
             &mac.key.label(),
             desc,
@@ -205,28 +239,35 @@ pub fn items(m: &Monitor) -> Vec<Item> {
 
     // Clipboard
     v.push(cmd(
-        "COPY & PASTE",
+        section::COPY,
         "Copy selection",
-        "Right-click",
-        "Copies what you selected with the mouse. Drag past the pane edge (or use the wheel) to select more than a screen; Ctrl+click extends. Raw log copies whole entries in full.".into(),
+        "Ctrl+C / right-click",
+        "A selection is copied as soon as you make it (let go of the mouse), and stays highlighted. Drag past the pane edge (or use the wheel) to select more than a screen; Ctrl+click extends. Raw log copies whole entries in full. Ctrl+C or right-click on a selection copies it again and clears the highlight; with nothing selected Ctrl+C goes to the device in live keys.".into(),
         Cmd::Copy,
     ));
     v.push(cmd(
-        "COPY & PASTE",
+        section::COPY,
+        "Select all",
+        "Alt+A / Ctrl+A",
+        "Selects everything in the pane you're in (F5 switches): the whole terminal with its scrollback, or every raw log entry. It's copied straight away. Alt+A works everywhere; Ctrl+A only in line mode, because in live keys it goes to the device.".into(),
+        Cmd::SelectAll,
+    ));
+    v.push(cmd(
+        section::COPY,
         "Paste",
         "Right-click",
         "Pastes the clipboard. One line goes into the send box (or straight to the device in live keys). Several lines ask first, then go line by line using the char delay.".into(),
         Cmd::Paste,
     ));
     v.push(cmd(
-        "COPY & PASTE",
+        section::COPY,
         "Copy all terminal output",
         "",
         "Copies everything the device has printed this session as plain text: handy for long show commands that scroll off the screen.".into(),
         Cmd::CopyAll,
     ));
     v.push(cmd(
-        "COPY & PASTE",
+        section::COPY,
         "Open transcript",
         "",
         "Opens this session's plain-text transcript (everything the device printed, cleaned up) in your text editor: Notepad on Windows, the desktop's default app on Linux.".into(),
@@ -235,7 +276,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
 
     // Settings remembered for this connection
     v.push(setting(
-        settings_section,
+        section::CONNECTION,
         "Line ending",
         m.profile.line_ending.label().into(),
         "F2",
@@ -243,7 +284,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         Setting::LineEnding,
     ));
     v.push(setting(
-        settings_section,
+        section::CONNECTION,
         "Char delay",
         match m.profile.char_delay_ms {
             0 => "off".into(),
@@ -254,7 +295,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         Setting::CharDelay,
     ));
     v.push(setting(
-        settings_section,
+        section::CONNECTION,
         "Send mode",
         m.profile.input_mode.label().into(),
         "Tab",
@@ -262,7 +303,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         Setting::InputMode,
     ));
     v.push(setting(
-        settings_section,
+        section::VIEW,
         "View",
         m.layout.label().into(),
         "F3",
@@ -270,7 +311,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         Setting::Layout,
     ));
     v.push(setting(
-        settings_section,
+        section::VIEW,
         "Hex format",
         m.log_format().label().into(),
         "F8",
@@ -281,7 +322,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
     // View
     if m.layout == Layout::Split {
         v.push(setting(
-            "VIEW",
+            section::VIEW,
             "Scroll pane",
             if m.focus == crate::monitor::Pane::Log { "Hex".into() } else { "Terminal".into() },
             "F5",
@@ -290,7 +331,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         ));
     }
     v.push(setting(
-        "VIEW",
+        section::VIEW,
         "Hex pane",
         if m.follow { "following".into() } else { "paused".into() },
         "F9",
@@ -298,7 +339,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         Setting::LogFollow,
     ));
     v.push(cmd(
-        "VIEW",
+        section::VIEW,
         "Clear screen",
         "F10",
         "Clears both panes on screen. The log and transcript files keep everything.".into(),
@@ -307,7 +348,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
 
     // Session
     v.push(setting(
-        "SESSION",
+        section::CONNECTION,
         "Log to file",
         if m.logger.is_some() { "on".into() } else { "off".into() },
         "",
@@ -315,7 +356,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         Setting::Logging,
     ));
     v.push(cmd(
-        "SESSION",
+        section::SESSION,
         "Reconnect",
         "Ctrl+R",
         format!(
@@ -325,14 +366,14 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         Cmd::Reconnect,
     ));
     v.push(cmd(
-        "SESSION",
+        section::SESSION,
         "New connection…",
         "Ctrl+N",
         format!("Back to the start screen to pick a different port or host. Settings for {conn} are kept."),
         Cmd::NewConnection,
     ));
     v.push(cmd(
-        "SESSION",
+        section::SESSION,
         "Save as favourite…",
         "",
         format!(
@@ -342,17 +383,17 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         Cmd::SaveFavourite,
     ));
     v.push(cmd(
-        "SESSION",
+        section::HELP,
         "Keyboard shortcuts & send syntax",
         "",
         "Lists every shortcut key and the HEX / ASCII send syntax.".into(),
         Cmd::Shortcuts,
     ));
     v.push(cmd(
-        "SESSION",
+        section::SESSION,
         "Quit",
         "Ctrl+Q",
-        "Closes RawTap. Settings and history are saved. In live keys every key goes to the device, so press F4 to leave live keys first."
+        "Exits (closes) RawTap. Settings and history are saved. In live keys Ctrl+Q goes to the device, but in this menu it always quits: F1, then Ctrl+Q."
             .into(),
         Cmd::Quit,
     ));
@@ -362,7 +403,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
     let last_checked = crate::update::last_checked().unwrap_or_else(|| "never".into());
     if let Some(update) = crate::update::available() {
         v.push(cmd(
-            "UPDATES",
+            section::UPDATES,
             &format!("Update to {}", update.latest_version),
             "",
             format!(
@@ -378,7 +419,7 @@ pub fn items(m: &Monitor) -> Vec<Item> {
         crate::update::Status::NotChecked | crate::update::Status::Checked(_) => String::new(),
     };
     v.push(cmd(
-        "UPDATES",
+        section::UPDATES,
         "Check for updates",
         "",
         format!("You have RawTap {version}. Last checked: {last_checked}.{check_state}"),
@@ -387,28 +428,28 @@ pub fn items(m: &Monitor) -> Vec<Item> {
 
     // Debug (App Standard section 4): what a bug report needs.
     v.push(cmd(
-        "DEBUG",
+        section::DEBUG,
         "Copy log",
         "",
         "Copies RawTap's own session log (not the device traffic) to the clipboard, for a bug report.".into(),
         Cmd::CopySessionLog,
     ));
     v.push(cmd(
-        "DEBUG",
+        section::DEBUG,
         "Open log folder",
         "",
         "Opens the folder with RawTap's session log, the previous session's log and the update log.".into(),
         Cmd::OpenLogFolder,
     ));
     v.push(cmd(
-        "DEBUG",
+        section::DEBUG,
         "Copy system info",
         "",
         "Copies RawTap's version, the OS, the desktop and the terminal to the clipboard. Bug reports ask for this and the log.".into(),
         Cmd::CopySystemInfo,
     ));
     v.push(setting(
-        "DEBUG",
+        section::DEBUG,
         "Log level",
         crate::session_log::level_name(log::max_level()).into(),
         "",
@@ -418,14 +459,57 @@ pub fn items(m: &Monitor) -> Vec<Item> {
     v
 }
 
-/// Items matching the filter (all of them when it's empty).
-pub fn visible(m: &Monitor, filter: &str) -> Vec<Item> {
+/// The rows the menu shows. The top level lists the sections, then Quit;
+/// an open section lists its items; typing searches every item, wherever
+/// it is.
+pub fn visible(m: &Monitor, menu: &Menu) -> Vec<Row> {
     let all = items(m);
-    let f = filter.trim().to_lowercase();
-    if f.is_empty() {
-        return all;
+    let f = menu.filter.trim().to_lowercase();
+    if !f.is_empty() {
+        return search(all, &f).into_iter().map(Row::Item).collect();
     }
-    let words: Vec<&str> = f.split_whitespace().collect();
+    if let Some(open) = menu.section {
+        return all
+            .into_iter()
+            .filter(|i| i.section == open)
+            .map(Row::Item)
+            .collect();
+    }
+    let mut rows: Vec<Row> = section::ALL
+        .iter()
+        .filter_map(|&name| {
+            let labels: Vec<&str> = all
+                .iter()
+                .filter(|i| i.section == name)
+                .map(|i| i.label.trim_end_matches('…'))
+                .collect();
+            (!labels.is_empty()).then(|| Row::Section {
+                name,
+                hint: labels.join(", "),
+            })
+        })
+        .collect();
+    rows.extend(PINNED.iter().filter_map(|&pinned| {
+        all.iter()
+            .find(|i| i.kind == Kind::Cmd(pinned))
+            .cloned()
+            .map(Row::Item)
+    }));
+    rows
+}
+
+/// Where a section sits on the top level, so going back highlights it.
+pub fn section_row(m: &Monitor, name: &str) -> usize {
+    visible(m, &Menu::default())
+        .iter()
+        .position(|r| matches!(r, Row::Section { name: n, .. } if *n == name))
+        .unwrap_or(0)
+}
+
+/// Items matching every word of `filter`; the ones whose name matches come
+/// before the ones that only match in their description.
+fn search(all: Vec<Item>, filter: &str) -> Vec<Item> {
+    let words: Vec<&str> = filter.split_whitespace().collect();
     let mut hits: Vec<(bool, Item)> = all
         .into_iter()
         .filter(|i| {
@@ -437,7 +521,6 @@ pub fn visible(m: &Monitor, filter: &str) -> Vec<Item> {
             (in_name, i)
         })
         .collect();
-    // Items whose name matches come before ones that only match in their description.
     hits.sort_by_key(|(in_name, _)| !*in_name);
     hits.into_iter().map(|(_, i)| i).collect()
 }

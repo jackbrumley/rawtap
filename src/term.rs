@@ -79,6 +79,12 @@ impl Term {
 
     /// Absolute row (counting from the oldest scrollback line) of the top visible row.
     /// Selections use absolute rows so they survive scrolling.
+    /// The absolute row of the cursor: the last row with output on it.
+    pub fn last_used_row(&self) -> usize {
+        let s = self.parser.screen();
+        s.scrollback_len() + s.cursor_position().0 as usize
+    }
+
     pub fn abs_top(&self) -> usize {
         let s = self.parser.screen();
         s.scrollback_len() - s.scrollback()

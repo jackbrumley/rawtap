@@ -1,9 +1,11 @@
 //! Rendering for the monitor screen: header, raw log pane, terminal pane, send box, footer.
 
 mod controls;
+mod menu_popup;
 pub(crate) mod panes;
 
-use controls::{draw_footer, draw_help, draw_input, draw_menu};
+use controls::{draw_footer, draw_help, draw_input};
+use menu_popup::draw_menu;
 use panes::{draw_log, draw_term};
 
 use crate::codec::{self, InputMode};

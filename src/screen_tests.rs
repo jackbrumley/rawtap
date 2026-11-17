@@ -212,16 +212,10 @@ fn the_view_switch_is_clickable_and_follows_you() {
     let mut t = Terminal::new(TestBackend::new(120, 30)).unwrap();
     t.draw(|f| ui::draw(f, &mut app)).unwrap();
     let footer = screen_text(&t).lines().last().unwrap().to_string();
-    assert!(footer.contains("View  Terminal  Split  Hex"), "{footer}");
-    let (hex, _) = app
-        .monitor
-        .as_ref()
-        .unwrap()
-        .footer_views
-        .iter()
-        .copied()
-        .find(|(_, v)| *v == config::Layout::Hex)
-        .unwrap();
+    // The key, what it does, then the current view; a click on the view
+    // changes to the next one, as F3 does (Split -> Hex).
+    assert!(footer.contains("F3  View  Split "), "{footer}");
+    let hex = app.monitor.as_ref().unwrap().footer_view.unwrap();
     app.on_event(Event::Mouse(ratatui::crossterm::event::MouseEvent {
         kind: ratatui::crossterm::event::MouseEventKind::Down(
             ratatui::crossterm::event::MouseButton::Left,

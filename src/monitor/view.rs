@@ -59,11 +59,60 @@ impl Monitor {
         self.set_status(format!("View: {}", l.label()), false);
     }
 
+    pub(super) fn has_selection(&self) -> bool {
+        self.selection.is_some_and(|s| !s.is_empty())
+    }
+
+    /// Ctrl+A or F1 → Select all: everything in the focused pane, the
+    /// terminal with its scrollback or every raw log entry.
+    pub(super) fn select_all(&mut self) {
+        let (anchor, head, what) = match self.focus {
+            Pane::Terminal => {
+                let (_, cols) = self.term.size();
+                let last = (self.term.last_used_row(), cols.saturating_sub(1));
+                ((0, 0), last, "the terminal")
+            }
+            Pane::Log => {
+                let (Some(first), Some(last)) = (self.entries.front(), self.entries.back()) else {
+                    self.set_status("Nothing to select yet", true);
+                    return;
+                };
+                ((first.id as usize, 0), (last.id as usize, 0), "the raw log")
+            }
+        };
+        self.selection = Some(Selection {
+            pane: self.focus,
+            anchor,
+            head,
+            dragging: false,
+            moved: true,
+        });
+        if let Some(copied) = self.copy_selected_text() {
+            self.set_status(
+                format!("Selected and copied all of {what} ({copied})"),
+                false,
+            );
+        }
+    }
+
+    /// Ctrl+C, right-click or F1 → Copy selection: copy it (again), then
+    /// clear the highlight, so the next Ctrl+C goes to the device.
     pub(super) fn copy_selection(&mut self) {
-        let Some(s) = self.selection.filter(|s| !s.is_empty()) else {
+        if !self.has_selection() {
             self.set_status("Nothing selected. Drag with the mouse to select.", true);
             return;
-        };
+        }
+        if let Some(copied) = self.copy_selected_text() {
+            self.set_status(format!("Copied {copied}"), false);
+            self.selection = None;
+        }
+    }
+
+    /// Copies the selection as soon as it's made (the end of a drag, or
+    /// select all), leaving it highlighted. Returns what was copied, e.g.
+    /// "3 lines"; a failure is shown on the status line.
+    fn copy_selected_text(&mut self) -> Option<String> {
+        let s = self.selection.filter(|s| !s.is_empty())?;
         let (start, end) = s.ordered();
         let (text, what) = match s.pane {
             Pane::Terminal => {
@@ -88,11 +137,12 @@ impl Monitor {
             }
         };
         match crate::clip::set(&text) {
-            Ok(()) => {
-                self.set_status(format!("Copied {what}"), false);
-                self.selection = None;
+            Ok(()) => Some(what),
+            Err(error) => {
+                log::warn!("{error}");
+                self.set_status(error, true);
+                None
             }
-            Err(e) => self.set_status(e, true),
         }
     }
 
@@ -271,13 +321,8 @@ impl Monitor {
                 self.scroll_lines(pane, ev.kind == MouseEventKind::ScrollUp, WHEEL_LINES);
             }
             MouseEventKind::Down(MouseButton::Left) => {
-                let clicked_view = self
-                    .footer_views
-                    .iter()
-                    .find(|(r, _)| r.contains((x, y).into()))
-                    .map(|(_, view)| *view);
-                if let Some(view) = clicked_view {
-                    self.set_layout(view);
+                if self.footer_view.is_some_and(|r| r.contains((x, y).into())) {
+                    self.change_setting(Setting::Layout, 1);
                     return;
                 }
                 let Some(p) = self.pane_at(x, y) else {
@@ -318,16 +363,21 @@ impl Monitor {
                     self.selection = Some(Selection { head, moved, ..s });
                 }
             }
+            // The end of a drag copies the selection straight away and
+            // leaves it highlighted.
             MouseEventKind::Up(MouseButton::Left) => {
                 self.drag_pos = None;
                 if let Some(s) = self.selection.as_mut() {
                     s.dragging = false;
                     if s.is_empty() {
                         self.selection = None;
+                    } else if let Some(copied) = self.copy_selected_text() {
+                        self.set_status(format!("Copied {copied}"), false);
                     }
                 }
             }
-            // Windows Terminal style: right-click copies a selection, otherwise pastes.
+            // Windows Terminal style: right-click on a selection copies it and
+            // clears the highlight; with nothing selected it pastes.
             MouseEventKind::Down(MouseButton::Right) => {
                 if self.selection.is_some_and(|s| !s.is_empty()) {
                     self.copy_selection();

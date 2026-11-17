@@ -150,8 +150,9 @@ saying why.
   macros); `src/monitor/view.rs` (panes, mouse, copy and paste) and
   `src/monitor/keys.rs` (commands, the F1 menu, keys).
 - `src/ui_monitor.rs`: drawing the monitor; `src/ui_monitor/panes.rs` (raw
-  log and terminal) and `src/ui_monitor/controls.rs` (send box, footer, menu,
-  help).
+  log and terminal), `src/ui_monitor/controls.rs` (send box, footer, help)
+  and `src/ui_monitor/menu_popup.rs` (the F1 menu: sections, an open
+  section, or search results from every section).
 - `src/link.rs`: serial, TCP client, TCP server, Telnet and SSH, each with
   a reader thread; `src/link/telnet.rs` is the Telnet protocol
   (negotiation, window size, break), with no network code;
@@ -214,10 +215,11 @@ saying why.
   the status line.
 - **Checks:** no frontend, so no `typecheck`, `lint` or frontend build. The
   root `package.json` holds only repository scripts and has no version.
-- **Settings layout:** the F1 menu is the settings screen, which lists
-  actions first; Updates (Update to X.Y.Z, Check for updates with "Last
-  checked") and Debug (Copy log, Open log folder, Copy system info, Log
-  level) are its last two sections.
+- **Settings layout:** the F1 menu is the settings screen: its top level
+  lists sections (`menu::section::ALL`), then Keyboard shortcuts and Quit;
+  typing searches every section. Updates (Update to X.Y.Z, Check for
+  updates with "Last checked") and Debug (Copy log, Open log folder, Copy
+  system info, Log level) are its last two sections.
 - **Settings and state:** `settings.json` is edited by hand (macros,
   folders, image extraction) and only read by RawTap, which writes the
   starter template when it's missing. Everything RawTap changes itself,

@@ -76,6 +76,7 @@ impl Monitor {
             }
             Cmd::Shortcuts => self.show_help = true,
             Cmd::Copy => self.copy_selection(),
+            Cmd::SelectAll => self.select_all(),
             Cmd::Paste => self.paste_clipboard(),
             Cmd::CopyAll => {
                 let mut text = self.plain_text.clone();
@@ -241,35 +242,52 @@ impl Monitor {
         };
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         let alt = k.modifiers.contains(KeyModifiers::ALT);
-        let items = menu::visible(self, &menu.filter);
-        let n = items.len();
+        let rows = menu::visible(self, &menu);
+        let n = rows.len();
         let sel = menu.selected.min(n.saturating_sub(1));
+        let row = rows.get(sel).cloned();
         match k.code {
-            KeyCode::Esc => {
-                if menu.filter.is_empty() {
-                    return Action::None; // closed
-                }
+            // Esc steps back: the search, then the open section, then closes.
+            KeyCode::Esc if !menu.filter.is_empty() => {
                 menu.filter.clear();
                 menu.selected = 0;
             }
+            KeyCode::Esc => match menu.section.take() {
+                Some(open) => menu.selected = menu::section_row(self, open),
+                None => return Action::None, // closed
+            },
             KeyCode::F(1) => return Action::None,
+            // The menu takes keys before the device does, so these work in
+            // live keys too: F1, then Ctrl+Q or Ctrl+N.
             KeyCode::Char('q') if ctrl && !alt => return Action::Quit,
+            KeyCode::Char('n') if ctrl && !alt => return Action::NewConnection,
             KeyCode::Up if n > 0 => menu.selected = (sel + n - 1) % n,
             KeyCode::Down if n > 0 => menu.selected = (sel + 1) % n,
             KeyCode::PageUp => menu.selected = sel.saturating_sub(8),
             KeyCode::PageDown => menu.selected = (sel + 8).min(n.saturating_sub(1)),
             KeyCode::Home => menu.selected = 0,
             KeyCode::End => menu.selected = n.saturating_sub(1),
+            KeyCode::Enter | KeyCode::Right if matches!(row, Some(menu::Row::Section { .. })) => {
+                if let Some(menu::Row::Section { name, .. }) = row {
+                    menu.section = Some(name);
+                    menu.selected = 0;
+                }
+            }
             KeyCode::Left | KeyCode::Right => {
-                if let Some(Kind::Setting(s)) = items.get(sel).map(|i| i.kind) {
+                if let Some(menu::Row::Item(item)) = &row
+                    && let Kind::Setting(s) = item.kind
+                {
                     self.change_setting(s, if k.code == KeyCode::Left { -1 } else { 1 });
                 }
             }
-            KeyCode::Enter => match items.get(sel).map(|i| i.kind) {
-                Some(Kind::Setting(s)) => self.change_setting(s, 1),
-                Some(Kind::Cmd(c)) => return self.run_cmd(c), // menu closes
-                None => {}
-            },
+            KeyCode::Enter => {
+                if let Some(menu::Row::Item(item)) = row {
+                    match item.kind {
+                        Kind::Setting(s) => self.change_setting(s, 1),
+                        Kind::Cmd(c) => return self.run_cmd(c), // menu closes
+                    }
+                }
+            }
             KeyCode::Backspace => {
                 menu.filter.pop();
                 menu.selected = 0;
@@ -280,7 +298,7 @@ impl Monitor {
             }
             _ => {}
         }
-        let n = menu::visible(self, &menu.filter).len();
+        let n = menu::visible(self, &menu).len();
         menu.selected = menu.selected.min(n.saturating_sub(1));
         self.menu = Some(menu);
         Action::None
@@ -337,6 +355,15 @@ impl Monitor {
 
         // Shortcuts that work in both line and live mode (all are also in the F1 menu).
         match k.code {
+            // As in Windows Terminal: with a selection, Ctrl+C copies it
+            // (and clears it), even in live keys. Ctrl+Shift+C arrives the
+            // same way where the terminal doesn't keep it for itself.
+            KeyCode::Char('c' | 'C') if ctrl && !alt && self.has_selection() => {
+                self.copy_selection()
+            }
+            // Select all in live keys too, where Ctrl+A belongs to the device
+            // (and most terminals send Ctrl+Shift+A as Ctrl+A).
+            KeyCode::Char('a' | 'A') if alt && !ctrl => self.select_all(),
             KeyCode::F(1) => self.menu = Some(Menu::default()),
             KeyCode::F(2) => self.change_setting(Setting::LineEnding, 1),
             KeyCode::F(3) => self.change_setting(Setting::Layout, 1),
@@ -373,9 +400,12 @@ impl Monitor {
         match k.code {
             KeyCode::Char('q') if ctrl && !alt => return Action::Quit,
             // One key per job: point there instead of being a second way.
-            KeyCode::Char('c') if ctrl && !alt => {
-                self.set_status("Ctrl+Q quits · right-click copies a selection", false)
-            }
+            KeyCode::Char('c') if ctrl && !alt => self.set_status(
+                "Ctrl+Q quits · select with the mouse (or Ctrl+A), then Ctrl+C copies",
+                false,
+            ),
+            // Ctrl+Shift+A arrives as Ctrl+A in most terminals.
+            KeyCode::Char('a' | 'A') if ctrl && !alt => self.select_all(),
             KeyCode::Char('r') if ctrl && !alt => return Action::Reconnect,
             KeyCode::Char('n') if ctrl && !alt => return Action::NewConnection,
             KeyCode::Char('t') if ctrl && !alt => self.change_setting(Setting::CharDelay, 1),
