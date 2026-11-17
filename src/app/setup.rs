@@ -164,6 +164,8 @@ pub enum ListRow {
     /// Opens an empty connection panel.
     New,
     Favourite(usize),
+    /// An index into `Saved::recent`.
+    Recent(usize),
 }
 
 pub struct PortInfo {
@@ -299,12 +301,21 @@ pub struct Setup {
     pub ports: Vec<PortInfo>,
     pub error: Option<String>,
     pub(super) last_scan: Option<Instant>,
+    /// Where the list's rows were drawn, for a click.
+    pub list_hits: Vec<(ratatui::layout::Rect, ListRow)>,
 }
 
 impl Setup {
+    /// New connection, the favourites, then the recent connections that
+    /// aren't favourites.
     pub fn list_rows(saved: &Saved) -> Vec<ListRow> {
         std::iter::once(ListRow::New)
             .chain((0..saved.favourites.len()).map(ListRow::Favourite))
+            .chain(
+                super::recent::visible(saved)
+                    .into_iter()
+                    .map(ListRow::Recent),
+            )
             .collect()
     }
 

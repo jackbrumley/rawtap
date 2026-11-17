@@ -3,7 +3,7 @@
 
 use super::{DIM, POPUP_DIM, dim, truncate, wrap_words};
 use crate::app::favourites::{self, FavouriteDialog, FavouriteForm};
-use crate::config::Saved;
+use crate::config::{Connection, Saved};
 use ratatui::{
     Frame,
     layout::Rect,
@@ -32,6 +32,16 @@ pub(super) fn new_connection_row(focused: bool) -> Line<'static> {
     Line::from(vec![
         Span::styled(marker(focused), Style::new().fg(Color::Cyan)),
         Span::styled(format!(" {label:<NAME_WIDTH$} "), name_style(focused)),
+    ])
+}
+
+/// A recent connection: what it connects to.
+pub(super) fn recent_row(connection: &Connection, focused: bool, width: u16) -> Line<'static> {
+    let room = (width as usize).saturating_sub(3 + 2 + 2).max(NAME_WIDTH);
+    let target = truncate(&favourites::describe(connection), room);
+    Line::from(vec![
+        Span::styled(marker(focused), Style::new().fg(Color::Cyan)),
+        Span::styled(format!(" {target:<NAME_WIDTH$} "), name_style(focused)),
     ])
 }
 

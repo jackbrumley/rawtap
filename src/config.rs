@@ -380,6 +380,8 @@ pub struct Saved {
     pub history: Vec<HistoryItem>,
     pub profiles: BTreeMap<String, Profile>,
     pub favourites: Vec<Favourite>,
+    /// The last connections opened, newest first (`app::recent`).
+    pub recent: Vec<Connection>,
 }
 
 impl Default for Saved {
@@ -393,6 +395,7 @@ impl Default for Saved {
             history: Vec::new(),
             profiles: BTreeMap::new(),
             favourites: Vec::new(),
+            recent: Vec::new(),
         }
     }
 }

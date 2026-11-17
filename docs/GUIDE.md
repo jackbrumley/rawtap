@@ -13,6 +13,7 @@ Save any connection (serial port, TCP client or server, Telnet, SSH) with a name
 - **+ New connection** opens an empty connection panel (only the connection type is the one you used last). **Enter** connects without saving; **Ctrl+S** saves it as a favourite (with no name yet, it suggests one, such as `SSH admin@10.0.0.5:22`; press Ctrl+S again to keep it). **Esc** goes back to the list (twice if there are unsaved changes).
 - **F1 → Save as favourite…** in a session saves the connection you're in.
 - On the start screen, **↑↓** moves through the list without changing anything. On a favourite, **Enter** connects, **E** (or F2) opens it in the panel to change its name, connection or options, and **Del** removes it (after asking).
+- **Recent** lists the last 5 connections you opened (newest first) under the favourites, leaving out any that are favourites. **Enter** or a click connects, **E** opens it in the panel (to change it, or Ctrl+S to save it as a favourite), **Del** takes it off the list. A click on a favourite connects too, and on **+ New connection** opens the panel.
 - A favourite opens in its connection's view (Connection options ▸ View, below), so a switch can always open in the terminal.
 - From the command line: `rawtap open "Core switch"` (any case).
 

@@ -4,6 +4,7 @@ pub mod connect;
 pub mod favourites;
 mod form;
 pub mod identity;
+pub mod recent;
 pub mod setup;
 pub mod update_prompt;
 
@@ -79,6 +80,7 @@ impl App {
                 ports: Vec::new(),
                 error: None,
                 last_scan: None,
+                list_hits: Vec::new(),
             },
             monitor: None,
             config,
@@ -305,6 +307,8 @@ impl App {
         ));
         self.monitor = Some(m);
         self.screen = Screen::Monitor;
+        let opened = self.saved.connection.clone();
+        recent::remember(&mut self.saved, &opened);
         self.setup.panel = None;
         self.setup.error = None;
         self.store_state_reporting();
@@ -401,10 +405,13 @@ impl App {
             Event::Key(k) => k,
             Event::Paste(t) => return self.on_paste(t),
             Event::Mouse(me) => {
-                if self.screen == Screen::Monitor
-                    && let Some(m) = self.monitor.as_mut()
-                {
-                    m.on_mouse(me);
+                match self.screen {
+                    Screen::Monitor => {
+                        if let Some(m) = self.monitor.as_mut() {
+                            m.on_mouse(me);
+                        }
+                    }
+                    Screen::Setup => self.setup_click(me),
                 }
                 return;
             }

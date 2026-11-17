@@ -26,7 +26,7 @@ pub const POPUP_DIM: Style = Style::new().fg(Color::Gray);
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     match app.screen {
-        Screen::Setup => draw_setup(f, app),
+        Screen::Setup => app.setup.list_hits = draw_setup(f, app),
         Screen::Monitor => {
             if let Some(m) = app.monitor.as_mut() {
                 crate::ui_monitor::draw(f, m);
@@ -187,10 +187,12 @@ struct SetupLayout {
     ports_shown: usize,
 }
 
-/// The list's rows: "New connection", a gap, the "Favourites" heading, then
-/// the favourites (or a line saying how to save one).
+/// The list's rows: "New connection", a gap, the "Favourites" heading, the
+/// favourites (or a line saying how to save one), then, when there are any,
+/// a gap, the "Recent" heading and the recent connections.
 fn list_rows(app: &App) -> usize {
-    3 + app.saved.favourites.len().max(1)
+    let recent = crate::app::recent::visible(&app.saved).len();
+    3 + app.saved.favourites.len().max(1) + if recent > 0 { 2 + recent } else { 0 }
 }
 
 fn setup_layout(app: &App, full: Rect) -> SetupLayout {
@@ -259,7 +261,8 @@ fn setup_layout(app: &App, full: Rect) -> SetupLayout {
     }
 }
 
-fn draw_setup(f: &mut Frame, app: &App) {
+/// Draws the start screen; returns where the list's rows are, for a click.
+fn draw_setup(f: &mut Frame, app: &App) -> Vec<(Rect, ListRow)> {
     let SetupLayout {
         area,
         error_rows,
@@ -297,6 +300,7 @@ fn draw_setup(f: &mut Frame, app: &App) {
     f.render_widget(block, area);
 
     let mut lines: Vec<Line> = vec![Line::from("")];
+    let mut hits: Vec<(usize, ListRow)> = Vec::new();
     let mut cursor = None;
     // What the highlighted field does (in the panel), and the keys for it.
     let (description, actions): (Option<String>, &[(&str, &str)]) = match &app.setup.panel {
@@ -317,7 +321,7 @@ fn draw_setup(f: &mut Frame, app: &App) {
             };
             (Some(field.description().to_string()), actions)
         }
-        None => (None, draw_list(app, inner.width, &mut lines)),
+        None => (None, draw_list(app, inner.width, &mut lines, &mut hits)),
     };
 
     if let Some(description) = description {
@@ -378,18 +382,42 @@ fn draw_setup(f: &mut Frame, app: &App) {
     if let Some(c) = cursor {
         f.set_cursor_position(c);
     }
+    // The list's rows never wrap, so each is on its own line of `inner`.
+    hits.into_iter()
+        .filter(|(line, _)| (*line as u16) < inner.height)
+        .map(|(line, row)| {
+            let rect = Rect {
+                x: inner.x,
+                y: inner.y + line as u16,
+                width: inner.width,
+                height: 1,
+            };
+            (rect, row)
+        })
+        .collect()
 }
 
-/// The list: "New connection", then the favourites. Returns the
-/// highlighted row's keys.
+/// The list: "New connection", the favourites, then the recent
+/// connections. Notes which line each row is on (for a click), and returns
+/// the highlighted row's keys.
 fn draw_list(
     app: &App,
     width: u16,
     lines: &mut Vec<Line<'static>>,
+    hits: &mut Vec<(usize, ListRow)>,
 ) -> &'static [(&'static str, &'static str)] {
     let rows = Setup::list_rows(&app.saved);
     let focus = app.setup.focus.min(rows.len() - 1);
-    lines.push(favourites::new_connection_row(focus == 0));
+    let mut push = |lines: &mut Vec<Line<'static>>, row: ListRow| {
+        let focused = rows[focus] == row;
+        hits.push((lines.len(), row));
+        lines.push(match row {
+            ListRow::New => favourites::new_connection_row(focused),
+            ListRow::Favourite(i) => favourites::row(&app.saved, i, focused, width),
+            ListRow::Recent(i) => favourites::recent_row(&app.saved.recent[i], focused, width),
+        });
+    };
+    push(lines, ListRow::New);
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled("   Favourites", DIM)));
     if app.saved.favourites.is_empty() {
@@ -399,11 +427,21 @@ fn draw_list(
         )));
     }
     for i in 0..app.saved.favourites.len() {
-        lines.push(favourites::row(&app.saved, i, focus == i + 1, width));
+        push(lines, ListRow::Favourite(i));
+    }
+    let recent = crate::app::recent::visible(&app.saved);
+    if !recent.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled("   Recent", DIM)));
+        for i in recent {
+            push(lines, ListRow::Recent(i));
+        }
     }
     match rows[focus] {
         ListRow::New => &[("Enter", "new connection")],
-        ListRow::Favourite(_) => &[("Enter", "connect"), ("E", "edit"), ("Del", "remove")],
+        ListRow::Favourite(_) | ListRow::Recent(_) => {
+            &[("Enter", "connect"), ("E", "edit"), ("Del", "remove")]
+        }
     }
 }
 

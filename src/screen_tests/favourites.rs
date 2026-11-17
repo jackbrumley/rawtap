@@ -214,3 +214,86 @@ fn log_to_file_is_remembered_per_connection() {
     assert!(app.logs_connection(&other));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Recent connections: listed under the favourites (not repeating one),
+/// highlighted on start-up when the last one used, connected by Enter or a
+/// click, and recorded when a connection opens.
+#[test]
+fn recent_connections_are_listed_and_connect_with_a_click() {
+    use app::setup::ListRow;
+    let dir = std::env::temp_dir().join(format!("rawtap_recent_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let paths = paths::Paths::at(dir.clone());
+    let (cfg, _) = config::load(&paths).unwrap();
+    // A device that accepts the connection.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        let held: Vec<_> = listener.incoming().take(2).flatten().collect();
+        std::thread::sleep(Duration::from_secs(5));
+        drop(held);
+    });
+    let tcp = |port: u16| config::Connection {
+        mode: ConnMode::Tcp,
+        tcp_host: "127.0.0.1".into(),
+        tcp_port: port.to_string(),
+        ..Default::default()
+    };
+    let switch = config::Connection {
+        mode: ConnMode::Ssh,
+        ssh_host: "10.0.0.5".into(),
+        ..Default::default()
+    };
+    let saved = config::Saved {
+        connection: tcp(port),
+        recent: vec![tcp(port), switch.clone()],
+        favourites: vec![config::Favourite {
+            name: "Core switch".into(),
+            connection: switch,
+        }],
+        ..Default::default()
+    };
+    let mut app = App::new(cfg, paths, saved, Vec::new(), true);
+    assert_eq!(
+        app.focused_list_row(),
+        ListRow::Recent(0),
+        "the last one used"
+    );
+    let mut t = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    t.draw(|f| ui::draw(f, &mut app)).unwrap();
+    dump(&t, "favourites and recent");
+    let text = screen_text(&t);
+    assert!(text.contains("Recent") && text.contains(&format!("TCP 127.0.0.1:{port}")));
+    assert_eq!(
+        text.matches("10.0.0.5").count(),
+        1,
+        "a favourite repeated as recent"
+    );
+
+    // A click on the recent connection connects to it.
+    let (rect, _) = *app
+        .setup
+        .list_hits
+        .iter()
+        .find(|(_, row)| *row == ListRow::Recent(0))
+        .unwrap();
+    app.on_event(Event::Mouse(ratatui::crossterm::event::MouseEvent {
+        kind: ratatui::crossterm::event::MouseEventKind::Down(
+            ratatui::crossterm::event::MouseButton::Left,
+        ),
+        column: rect.x + 4,
+        row: rect.y,
+        modifiers: KeyModifiers::NONE,
+    }));
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while app.monitor.is_none() && std::time::Instant::now() < deadline {
+        app.tick();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(app.monitor.is_some(), "{:?}", app.setup.error);
+    assert_eq!(app.saved.recent[0].tcp_port, port.to_string());
+    assert_eq!(app.saved.recent.len(), 2, "kept once");
+    app.shutdown().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}

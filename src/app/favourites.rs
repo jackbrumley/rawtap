@@ -7,7 +7,7 @@
 //! with E or F2 (the panel again), removed with Del, and opened from the
 //! command line with `rawtap open "<name>"`. They live in state.json.
 
-use super::setup::Panel;
+use super::setup::{ListRow, Panel};
 use super::{App, Screen};
 use crate::config::{Connection, Favourite, Saved};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -274,11 +274,17 @@ impl App {
         self.store_state_reporting();
     }
 
-    /// The start screen as it opens: the list, highlighting the favourite
-    /// that matches the last connection, else "New connection".
+    /// The start screen as it opens: the list, highlighting the last
+    /// connection (a favourite, else the newest recent one), else "New
+    /// connection".
     pub(super) fn home_focus(&mut self) {
         self.setup.panel = None;
-        self.setup.focus = find(&self.saved, &self.saved.connection).map_or(0, |i| i + 1);
+        let rows = super::setup::Setup::list_rows(&self.saved);
+        let last = match find(&self.saved, &self.saved.connection) {
+            Some(i) => ListRow::Favourite(i),
+            None => ListRow::Recent(0),
+        };
+        self.setup.focus = rows.iter().position(|r| *r == last).unwrap_or(0);
     }
 }
 

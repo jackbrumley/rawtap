@@ -178,6 +178,10 @@ saying why.
   → Save as favourite, `rawtap open`; `src/ui/favourites.rs` draws the
   list's rows and the name and remove dialogs, `src/ui/connection_panel.rs`
   the panel.
+- `src/app/recent.rs`: recent connections (the last 5 opened, newest
+  first, one per port or host, in `state.json`), listed under the
+  favourites without repeating one; Enter or a click connects, E edits,
+  Del forgets.
 - `src/secrets.rs`: remembered passwords, only in the OS keyring
   (keyring-core: Secret Service on Linux, Credential Manager on Windows);
   `src/monitor/password.rs` sends one at a connection's first login

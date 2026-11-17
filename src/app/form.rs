@@ -8,7 +8,9 @@ use super::setup::{
     connection_profile_key, cycle_in,
 };
 use crate::config::Connection;
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::crossterm::event::{
+    KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 
 impl App {
     pub(super) fn setup_key(&mut self, k: KeyEvent) {
@@ -43,6 +45,10 @@ impl App {
             (KeyCode::Char('e'), ListRow::Favourite(i)) if !ctrl => self.edit_favourite(i),
             (KeyCode::F(2), ListRow::Favourite(i)) => self.edit_favourite(i),
             (KeyCode::Delete, ListRow::Favourite(i)) => self.ask_remove_favourite(i),
+            (KeyCode::Enter, ListRow::Recent(i)) => self.connect_recent(i),
+            (KeyCode::Char('e'), ListRow::Recent(i)) if !ctrl => self.edit_recent(i),
+            (KeyCode::F(2), ListRow::Recent(i)) => self.edit_recent(i),
+            (KeyCode::Delete, ListRow::Recent(i)) => self.forget_recent(i),
             _ => {}
         }
     }
@@ -69,6 +75,34 @@ impl App {
             KeyCode::Enter => self.connect_panel(),
             KeyCode::Char(_) if !typed => {}
             code => panel.edit_text(field, code),
+        }
+    }
+
+    /// A click on the start screen's list: New connection opens the panel,
+    /// a favourite or recent connection connects.
+    pub(super) fn setup_click(&mut self, me: MouseEvent) {
+        if me.kind != MouseEventKind::Down(MouseButton::Left)
+            || self.setup.panel.is_some()
+            || self.connecting.is_some()
+        {
+            return;
+        }
+        let Some(row) = self
+            .setup
+            .list_hits
+            .iter()
+            .find(|(r, _)| r.contains((me.column, me.row).into()))
+            .map(|(_, row)| *row)
+        else {
+            return;
+        };
+        if let Some(i) = Setup::list_rows(&self.saved).iter().position(|r| *r == row) {
+            self.setup.focus = i;
+        }
+        match row {
+            ListRow::New => self.open_new_connection(),
+            ListRow::Favourite(i) => self.connect_favourite(i),
+            ListRow::Recent(i) => self.connect_recent(i),
         }
     }
 
