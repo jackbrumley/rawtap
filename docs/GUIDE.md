@@ -64,7 +64,7 @@ At a `Password:` / `Passcode:` / `Secret:` / `PIN:` prompt, what you type is nev
 - **Typing** searches every section at once (`delay`, `break`, `save`...); each result shows its section, such as *Connection options › Char delay*.
 - **Esc** clears the search, then goes back, then closes the menu.
 
-The **Session log** section is this session's recording: *Log to file*, *Name this session log…* (adds a name after the date and time in the file names), *Open session log*, *Open transcript*, *Open session logs folder* and *Copy session log path*.
+The **Session log** section is this session's recording: *Log to file*, *Name this session log…* (adds a name after the date and time in the file names), *Open session log (hex)* (the raw `.log`: every byte both ways), *Open session log (text)* (the `.txt`: the terminal output as clean text), *Open session logs folder* and *Copy session log path*.
 
 The **Debug** section at the bottom has what a bug report needs: *Copy log* (RawTap's own debug log, not your sessions), *Open log folder*, *Copy system info* and the *Log level*.
 
@@ -84,7 +84,7 @@ These follow Windows Terminal conventions:
 | Select all | **Alt+A** selects and copies the whole pane you're in: the terminal with its scrollback, or every raw log entry. In line mode **Ctrl+A** (or Ctrl+Shift+A) does too; in live keys Ctrl+A goes to the device (most terminals send Ctrl+Shift+A as Ctrl+A). Also **F1 → Select all**. |
 | Copy | **Automatic:** a selection is copied as soon as you let go of the mouse (or select all), and stays highlighted. **Ctrl+C** or **right-click** on a selection copies it again and clears the highlight. Ctrl+C copies only while there's a selection; otherwise it does what it always does. GNOME Terminal keeps **Ctrl+Shift+C** for its own copy, which can't see RawTap's selection, so use Ctrl+C. |
 | Paste | **Right-click** with nothing selected (your terminal's own paste works too). One line goes into the send box (in live keys, straight to the device). **Several lines ask for confirmation**, then go line by line with the line ending and the char delay. |
-| Long output | F1 → *Copy all terminal output*, or F1 → Session log → *Open transcript* (Notepad on Windows, your default text app on Linux) |
+| Long output | F1 → *Copy all terminal output*, or F1 → Session log → *Open session log (text)* (Notepad on Windows, your default text app on Linux) |
 | The console's own selection | **Shift+drag** |
 
 **Ctrl+Q** quits, from the start screen, a session or the menu. In live keys every key goes to the device, but the F1 menu still works: **F1, then Ctrl+Q** quits (and **F1, then Ctrl+N** starts a new connection). Searching the menu for "exit" finds Quit too. Ctrl+C never quits; with a selection it copies. (In Windows Terminal, Shift+click is taken by the console's own selection, which is why extending uses Ctrl+click.)

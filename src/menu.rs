@@ -368,16 +368,16 @@ pub fn items(m: &Monitor) -> Vec<Item> {
     ));
     v.push(cmd(
         section::LOGS,
-        "Open session log",
+        "Open session log (hex)",
         "",
-        "Opens this session's log (both directions, hex and text, with times) in your text editor. Passwords typed at a password prompt are logged as <hidden>.".into(),
+        "Opens the raw log: every byte both ways, in hex and text, with times (the .log file). Passwords typed at a password prompt are logged as <hidden>.".into(),
         Cmd::OpenSessionLog,
     ));
     v.push(cmd(
         section::LOGS,
-        "Open transcript",
+        "Open session log (text)",
         "",
-        "Opens this session's plain-text transcript (everything the device printed, cleaned up) in your text editor: Notepad on Windows, the desktop's default app on Linux.".into(),
+        "Opens the terminal output as clean text: what the device printed, as you saw it, without escape codes or --More-- (the .txt file). Notepad on Windows, the desktop's default app on Linux.".into(),
         Cmd::OpenTranscript,
     ));
     v.push(cmd(

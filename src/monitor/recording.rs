@@ -43,18 +43,18 @@ impl Monitor {
         }
     }
 
-    /// F1 → Open session log: the hex log, in the desktop's text app.
+    /// F1 → Open session log (hex): the raw log, in the desktop's text app.
     pub(super) fn open_session_log(&mut self) {
         match self.logger.as_ref().map(|l| l.path.clone()) {
-            Some(path) => self.open_reporting(&path, "the session log"),
+            Some(path) => self.open_reporting(&path, "the session log (hex)"),
             None => self.not_logging(),
         }
     }
 
-    /// F1 → Open transcript: the plain text the device printed.
+    /// F1 → Open session log (text): the terminal output as clean text.
     pub(super) fn open_transcript(&mut self) {
         match self.transcript.as_ref().map(|t| t.path.clone()) {
-            Some(path) => self.open_reporting(&path, "the transcript"),
+            Some(path) => self.open_reporting(&path, "the session log (text)"),
             None => self.not_logging(),
         }
     }
