@@ -166,11 +166,16 @@ pub fn centered(area: Rect, w: u16, h: u16) -> Rect {
 
 // ---------------------------------------------------------------- setup
 
-/// Where the start screen's box goes, and its wrapped notes and errors.
+/// Where the start screen's box goes, its wrapped notes and errors, and how
+/// many detected ports fit.
 struct SetupLayout {
     area: Rect,
     error_rows: Vec<String>,
     note_rows: Vec<String>,
+    /// Detected ports listed; the rest are summed up in one "… and N more"
+    /// row. The list is the only part that gives way in a short window, so
+    /// the keys, errors and notes under it always show.
+    ports_shown: usize,
 }
 
 fn setup_layout(app: &App, full: Rect) -> SetupLayout {
@@ -200,25 +205,45 @@ fn setup_layout(app: &App, full: Rect) -> SetupLayout {
         .iter()
         .flat_map(|n| wrap_words(n, text_width))
         .collect();
-    let notes_rows = note_rows.len()
+    // Rows a wrapped line really takes: one longer than the box (a path with
+    // no space to break at) wraps again when drawn.
+    let inner_width = w.saturating_sub(2).max(1) as usize;
+    let rows_for = |row: &String| (row.chars().count() + 3).div_ceil(inner_width).max(1);
+    let notes_rows = note_rows.iter().map(rows_for).sum::<usize>()
         + if error_rows.is_empty() {
             0
         } else {
-            error_rows.len() + 2
-        }
-        + 1;
-    let h = (rows.len() + favourite_rows + ports_rows + notes_rows + 8 + 5) as u16;
+            1 + error_rows.iter().map(rows_for).sum::<usize>()
+        };
+    // Exactly what `draw_setup` draws: the borders, the blank top row, the
+    // rows and port list, the description (blank, rule, two rows), the keys
+    // (blank, one row), then errors and notes.
+    let h = (2 + 1 + favourite_rows + rows.len() + ports_rows + 4 + 2 + notes_rows) as u16;
     let top = if full.height >= h + 2 { 1 } else { 0 };
+    // Too tall: list fewer ports, and one row saying how many more there are.
+    let excess = h.saturating_sub(full.height - top) as usize;
+    let ports = app.setup.ports.len();
+    let ports_shown = if excess > 0 && ports_rows > 0 && ports > 1 {
+        ports.saturating_sub(excess + 1)
+    } else {
+        ports
+    };
+    let saved = if ports_shown < ports {
+        ports - ports_shown - 1
+    } else {
+        0
+    };
     let area = Rect {
         x: full.x + (full.width - w) / 2,
         y: full.y + top,
         width: w,
-        height: h.min(full.height - top),
+        height: (h - saved as u16).min(full.height - top),
     };
     SetupLayout {
         area,
         error_rows,
         note_rows,
+        ports_shown,
     }
 }
 
@@ -229,6 +254,7 @@ fn draw_setup(f: &mut Frame, app: &App) {
         area,
         error_rows,
         note_rows,
+        ports_shown,
     } = setup_layout(app, f.area());
     f.render_widget(Clear, area);
     let block = Block::bordered()
@@ -330,11 +356,18 @@ fn draw_setup(f: &mut Frame, app: &App) {
                 Style::new().fg(Color::Yellow),
             )));
         }
-        for p in &app.setup.ports {
+        for p in app.setup.ports.iter().take(ports_shown) {
             lines.push(Line::from(vec![
                 Span::styled(format!("     {:<8}", p.name), Style::new().fg(Color::White)),
                 Span::styled(p.desc.clone(), DIM),
             ]));
+        }
+        let hidden = app.setup.ports.len() - ports_shown;
+        if hidden > 0 {
+            lines.push(Line::from(Span::styled(
+                format!("     … and {hidden} more. ←→ on Serial port goes through them all."),
+                DIM,
+            )));
         }
     }
 
@@ -437,4 +470,76 @@ pub fn wrap_words(text: &str, width: usize) -> Vec<String> {
         rows.push(cur);
     }
     rows
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::setup::PortInfo;
+    use ratatui::{Terminal, backend::TestBackend};
+
+    fn screen(width: u16, height: u16, ports: usize) -> String {
+        let dir =
+            std::env::temp_dir().join(format!("rawtap_ui_ports_{}_{height}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let paths = crate::paths::Paths::at(dir.clone());
+        let (cfg, notes) = crate::config::load(&paths).unwrap();
+        let mut saved = crate::config::Saved::default();
+        saved.connection.mode = crate::config::ConnMode::Serial;
+        let mut app = App::new(cfg, paths, saved, notes, true);
+        app.setup.ports = (1..=ports)
+            .map(|n| PortInfo {
+                name: format!("COM{n}"),
+                desc: format!("USB Serial Device (COM{n})"),
+            })
+            .collect();
+        let mut t = Terminal::new(TestBackend::new(width, height)).unwrap();
+        t.draw(|f| draw(f, &mut app)).unwrap();
+        let buf = t.backend().buffer();
+        let text = (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| buf[(x, y)].symbol().to_string())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join(
+                "
+",
+            );
+        let _ = std::fs::remove_dir_all(&dir);
+        text
+    }
+
+    /// The default console window (120×30) with many ports: the list gives
+    /// way, and the keys under it still show.
+    #[test]
+    fn many_ports_in_a_short_window_keep_the_keys_visible() {
+        let text = screen(120, 30, 20);
+        println!("{text}");
+        assert!(
+            text.contains("Enter"),
+            "keys cut off:
+{text}"
+        );
+        assert!(
+            text.contains("save as favourite"),
+            "keys cut off:
+{text}"
+        );
+        assert!(
+            text.contains("more. ←→ on Serial port"),
+            "no summary row:
+{text}"
+        );
+        assert!(text.contains("COM1 "));
+        assert!(!text.contains("COM20"));
+    }
+
+    #[test]
+    fn every_port_is_listed_when_there_is_room() {
+        let text = screen(120, 60, 20);
+        assert!(text.contains("COM20"));
+        assert!(!text.contains("more. ←→"));
+    }
 }

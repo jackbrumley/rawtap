@@ -119,7 +119,9 @@ saying why.
   itself again through `conhost.exe`, so it gets its own window, taskbar
   button and icon. The installers' Start menu shortcuts start RawTap through
   `conhost.exe` directly. A window started that way shows conhost's icon, so
-  RawTap puts its own on it (`WM_SETICON`), which the taskbar button shows.
+  RawTap puts its own on it (`WM_SETICON`), which the taskbar button shows,
+  and grows the window to 140×42 (never smaller, capped to the screen) so
+  the start screen fits and the split view has room.
   Started from a shell, RawTap stays in that terminal and leaves its icon
   alone.
 - `src/paths.rs`: every on-disk location, and the one-time move of 0.6.0's
@@ -135,7 +137,9 @@ saying why.
   script (`docs/update.sh`, `docs/update.ps1`).
 - `src/app/identity.rs`: `APP_ID` and its tests; the launcher is
   `packaging/info.brumley.rawtap.desktop` (`Terminal=true`).
-- `src/app.rs`, `src/ui.rs`: the start screen and app wiring.
+- `src/app.rs`, `src/ui.rs`: the start screen and app wiring. In a short
+  window the detected ports list gives way first ("… and N more"), so the
+  keys, errors and notes under it always show.
 - `src/monitor.rs`: the monitor's state (raw log, terminal, send box,
   macros); `src/monitor/view.rs` (panes, mouse, copy and paste) and
   `src/monitor/keys.rs` (commands, the F1 menu, keys).
