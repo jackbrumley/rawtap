@@ -20,6 +20,11 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"  # Invoke-WebRequest is far slower with the progress bar.
 
+# Older Windows 10 PCs offer only TLS 1.0 by default, which GitHub refuses
+# ("Could not create SSL/TLS secure channel"). Add TLS 1.2 for this session,
+# including the copy this script starts as administrator.
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
 # Windows PowerShell started from PowerShell 7, or from a program started
 # there (RawTap's updater up to 0.12.1, say), inherits PowerShell 7's module
 # folders, loads PowerShell 7's modules, and can't find Get-FileHash. Keep
