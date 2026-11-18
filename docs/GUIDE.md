@@ -14,7 +14,7 @@ Save any connection (serial port, TCP client or server, Telnet, SSH) with a name
 - **F1 → Save as favourite…** in a session saves the connection you're in.
 - On the start screen, **↑↓** moves through the list without changing anything. On a favourite, **Enter** connects, **E** (or F2) opens it in the panel to change its name, connection or options, and **Del** removes it (after asking).
 - **Recent** lists the last 5 connections you opened (newest first) under the favourites, leaving out any that are favourites. **Enter** or a click connects, **E** opens it in the panel (to change it, or Ctrl+S to save it as a favourite), **Del** takes it off the list. A click on a favourite connects too, and on **+ New connection** opens the panel.
-- A favourite opens in its connection's view (Connection options ▸ View, below), so a switch can always open in the terminal.
+- A favourite opens in its connection's view (Connection options ► View, below), so a switch can always open in the terminal.
 - From the command line: `rawtap open "Core switch"` (any case).
 
 Favourites are kept in `state.json`. Passwords are never saved there.
@@ -37,7 +37,7 @@ RawTap never writes a password to its own files. Two ways to stop typing one:
  F1  Menu    F3  View  Split     F4  Leave live keys    F8  Hex compact   F1 then Ctrl+Q quits
 ```
 
-- **The view**: **Terminal** (the live terminal), **Hex** (the raw data in hex and text) or **Split** (both: side by side when the window is at least 130 columns wide, stacked otherwise). Switch with **F3** or click the current view in the footer (`F3 View Split`). RawTap remembers the last view you used and opens every connection in it, unless the connection panel's Connection options ▸ View gives that connection its own (Terminal, Split or Hex).
+- **The view**: **Terminal** (the live terminal), **Hex** (the raw data in hex and text) or **Split** (both: side by side when the window is at least 130 columns wide, stacked otherwise). Switch with **F3** or click the current view in the footer (`F3 View Split`). RawTap remembers the last view you used and opens every connection in it, unless the connection panel's Connection options ► View gives that connection its own (Terminal, Split or Hex).
 - **Live keys** shows on the terminal pane's title, with the line ending Enter sends; the send box is hidden then, so the terminal gets its rows. The header shows a red **● REC** while the session is recorded to a log; click it to open the session logs folder.
   - **Ctrl+←/→** changes the terminal width; **Ctrl+↑/↓** changes the Hex strip height.
 - **Each connection remembers its own settings** (`serial:COM22`, `tcp:10.0.0.5:2101`...): hex format, line ending, HEX/ASCII, char delay, logging and pane sizes. A switch and a scanner feed can each keep their own setup.
@@ -71,7 +71,7 @@ The **Debug** section at the bottom has what a bug report needs: *Copy log* (Raw
 
 A short description of the highlighted item is shown at the bottom. On screen, the footer shows only F1 Menu, F3 View, F4 Live keys, F8 Hex format (when the Hex pane shows), Ctrl+N New connection and Ctrl+Q Quit.
 
-The connection panel has a **Connection options ▸** row (←→ or Enter to open it). It shows the line ending, char delay, send mode, view and *Log to file* remembered for the selected port or host, so you can set them before connecting. *Log to file* is also in **F1 → Session log**, and changing it there is remembered too. The view is **Last used** (whichever you used last) or always **Terminal**, **Split** or **Hex** for that connection. The line under the panel lists what Enter and the other keys do for the highlighted row.
+The connection panel has a **Connection options ►** row (←→ or Enter to open it). It shows the line ending, char delay, send mode, view and *Log to file* remembered for the selected port or host, so you can set them before connecting. *Log to file* is also in **F1 → Session log**, and changing it there is remembered too. The view is **Last used** (whichever you used last) or always **Terminal**, **Split** or **Hex** for that connection. The line under the panel lists what Enter and the other keys do for the highlighted row.
 
 ## Mouse, copy and paste
 

@@ -391,3 +391,34 @@ fn walkthrough() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Windows' classic console fonts (Consolas, Lucida Console) lack these
+/// characters. The console borrows them from another font when it draws a
+/// whole line, but a redrawn cell (a moved selection arrow) shows a box.
+/// Use ► ◄ ▼ √ × or ASCII instead.
+#[test]
+fn no_characters_the_windows_console_fonts_lack() {
+    const MISSING: &[char] = &['▶', '◀', '▸', '▾', '✔', '✘', '⏸', '‖', '⠋'];
+    let mut found = Vec::new();
+    let mut dirs = vec![std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src")];
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(&dir).expect("read src") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                dirs.push(path);
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("read source");
+            for (n, line) in text.lines().enumerate() {
+                let code = line.trim_start();
+                if code.starts_with("//") || code.starts_with("const MISSING") {
+                    continue;
+                }
+                if line.contains(MISSING) {
+                    found.push(format!("{}:{}", path.display(), n + 1));
+                }
+            }
+        }
+    }
+    assert!(found.is_empty(), "missing from console fonts: {found:?}");
+}

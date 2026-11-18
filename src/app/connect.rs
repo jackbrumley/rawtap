@@ -21,7 +21,9 @@ pub struct Connecting {
 
 /// The spinner frame for an attempt that started at `started`.
 pub fn spinner(started: Instant) -> char {
-    const FRAMES: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    // Plain ASCII: the classic Windows console fonts (Consolas, Lucida
+    // Console) have no braille dots, and a missing glyph shows as a box.
+    const FRAMES: [char; 4] = ['|', '/', '-', '\\'];
     FRAMES[(started.elapsed().as_millis() / 80) as usize % FRAMES.len()]
 }
 

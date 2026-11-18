@@ -88,6 +88,11 @@ saying why.
   still counts.
 - **Platforms:** RawTap ships for Linux and Windows. Port names, file
   openers and error messages must work on both (`/dev/ttyUSB0` and `COM3`).
+- **Characters on screen:** Windows' classic console fonts (Consolas,
+  Lucida Console) lack many symbols, such as ▶ ◀ ▸ ✔ ✘ and braille. A
+  redrawn cell then shows a box, so use ► ◄ ▼ √ × or ASCII.
+  `no_characters_the_windows_console_fonts_lack` (`src/screen_tests.rs`)
+  fails on the known ones.
 - **Paths:** only `src/paths.rs` calls `dirs::`. Everything lives in
   `~/.config/rawtap` on every platform.
 - **JSON files:** `settings.json` and `state.json` are read and written only

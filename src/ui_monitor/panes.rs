@@ -93,8 +93,8 @@ pub(crate) fn entry_lines(e: &Entry, width: u16, fmt: LogFormat) -> Vec<Line<'st
         ])],
         EntryKind::Info(m) | EntryKind::Good(m) | EntryKind::Error(m) => {
             let (mark, style) = match e.kind {
-                EntryKind::Good(_) => ("✔ ", Style::new().fg(Color::Green)),
-                EntryKind::Error(_) => ("✘ ", Style::new().fg(Color::LightRed)),
+                EntryKind::Good(_) => ("√ ", Style::new().fg(Color::Green)),
+                EntryKind::Error(_) => ("× ", Style::new().fg(Color::LightRed)),
                 _ => ("· ", Style::new().fg(Color::Gray)),
             };
             if fmt == LogFormat::Compact {
@@ -176,7 +176,7 @@ pub(super) fn draw_log(f: &mut Frame, m: &mut Monitor, area: Rect) {
     if !m.follow {
         block = block.title_top(
             Line::from(Span::styled(
-                " ⏸ paused · F9 or Ctrl+End to follow ",
+                " || paused · F9 or Ctrl+End to follow ",
                 Style::new().fg(Color::Yellow),
             ))
             .right_aligned(),

@@ -45,7 +45,7 @@ pub(super) fn draw_rows(
         } else {
             Style::new()
         };
-        let marker = if focused { " ▶ " } else { "   " };
+        let marker = if focused { " ► " } else { "   " };
         let mut spans = vec![
             Span::styled(marker, Style::new().fg(Color::Cyan)),
             Span::styled(format!("{:<LABEL_WIDTH$}", field.label()), label_style),
@@ -57,7 +57,7 @@ pub(super) fn draw_rows(
         };
         let cyclable = field.cycles() && field != Field::Options;
         if focused && cyclable {
-            spans.push(Span::styled("◀ ", DIM));
+            spans.push(Span::styled("◄ ", DIM));
         }
         if field == Field::Name && value.is_empty() && !focused {
             spans.push(Span::styled(" only needed to save it as a favourite", DIM));
@@ -65,7 +65,7 @@ pub(super) fn draw_rows(
             spans.push(Span::styled(format!(" {value} "), val_style));
         }
         if focused && cyclable {
-            spans.push(Span::styled(" ▶", DIM));
+            spans.push(Span::styled(" ►", DIM));
         }
         if focused && field.is_text() {
             let x = inner.x

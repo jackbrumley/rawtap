@@ -279,7 +279,7 @@ impl App {
                 } else {
                     format!("{} ms delay", p.char_delay_ms)
                 };
-                let arrow = if panel.options_open { "▾" } else { "▸" };
+                let arrow = if panel.options_open { "▼" } else { "►" };
                 let log = if self.logs_connection(c) {
                     "logged"
                 } else {

@@ -99,7 +99,7 @@ pub(super) fn draw_input(f: &mut Frame, m: &Monitor, area: Rect) {
                         ))
                     }
                     Err(e) => Line::from(Span::styled(
-                        format!(" ✘ {e} "),
+                        format!(" × {e} "),
                         Style::new().fg(Color::LightRed),
                     )),
                 }

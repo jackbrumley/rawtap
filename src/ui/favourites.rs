@@ -23,7 +23,7 @@ fn name_style(focused: bool) -> Style {
 }
 
 fn marker(focused: bool) -> &'static str {
-    if focused { " ▶ " } else { "   " }
+    if focused { " ► " } else { "   " }
 }
 
 /// The list's first row, which opens an empty connection panel.

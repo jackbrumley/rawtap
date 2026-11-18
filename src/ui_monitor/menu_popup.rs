@@ -145,7 +145,7 @@ pub(super) fn draw_menu(f: &mut Frame, m: &Monitor) {
 fn section_line(name: &str, hint: &str, selected: bool, width: usize) -> Line<'static> {
     let hint = truncate(hint, width.saturating_sub(SECTION_W + 6));
     if selected {
-        let text = format!(" {name:<SECTION_W$} ▸  {hint}");
+        let text = format!(" {name:<SECTION_W$} ►  {hint}");
         return Line::from(Span::styled(
             format!("{text:<width$}"),
             Style::new().fg(Color::Black).bg(Color::Cyan),
@@ -156,7 +156,7 @@ fn section_line(name: &str, hint: &str, selected: bool, width: usize) -> Line<'s
             format!(" {name:<SECTION_W$} "),
             Style::new().fg(Color::White).add_modifier(Modifier::BOLD),
         ),
-        Span::styled("▸  ", Style::new().fg(Color::Cyan)),
+        Span::styled("►  ", Style::new().fg(Color::Cyan)),
         Span::styled(hint, POPUP_DIM),
     ])
 }
@@ -168,7 +168,7 @@ fn item_line(item: &Item, searching: bool, selected: bool, width: usize) -> Line
     let val_w = 16usize;
     let label_w = width.saturating_sub(key_w + val_w + 3);
     let value = match (&item.value, selected, item.kind) {
-        (Some(v), true, Kind::Setting(_)) => format!("◀ {v} ▶"),
+        (Some(v), true, Kind::Setting(_)) => format!("◄ {v} ►"),
         (Some(v), _, _) => v.clone(),
         _ => String::new(),
     };
